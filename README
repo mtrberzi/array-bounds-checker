@@ -1,0 +1,7 @@
+make sure all the symlinks in each LOCATION.txt are formed
+
+run with
+
+ant -e -find build.xml arraysafety-tests
+
+from anywhere in the checker-framework/checker directory
