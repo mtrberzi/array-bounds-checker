@@ -13,6 +13,10 @@ import org.checkerframework.framework.type.AnnotatedTypeMirror;
 import org.checkerframework.framework.type.AnnotatedTypeFactory;
 import org.checkerframework.javacutil.AnnotationUtils;
 import org.checkerframework.framework.util.AnnotationBuilder;
+import org.checkerframework.common.value.ValueChecker;
+import org.checkerframework.common.value.ValueCheckerUtils;
+import org.checkerframework.common.value.qual.IntVal;
+import org.checkerframework.common.value.qual.ArrayLen;
 
 import java.util.List;
 import org.checkerframework.javacutil.Pair;
@@ -21,15 +25,21 @@ import javax.lang.model.element.AnnotationMirror;
 
 import com.sun.source.tree.LiteralTree;
 import com.sun.source.tree.Tree;
+import com.sun.source.tree.ArrayAccessTree;
+import com.sun.source.tree.ExpressionTree;
 
 public class ArraySafetyAnnotatedTypeFactory extends GenericAnnotatedTypeFactory<CFValue, CFStore, ArraySafetyTransfer, ArraySafetyAnalysis> {
 
     protected final AnnotationMirror UNSAFE_ARRAY_INDEX;
+    protected final AnnotationMirror INTVAL;
+    protected final AnnotationMirror ARRAYLEN;
     
     public ArraySafetyAnnotatedTypeFactory(BaseTypeChecker checker) {
 	super(checker);
 
 	UNSAFE_ARRAY_INDEX = AnnotationUtils.fromClass(elements, UnsafeArrayIndex.class);
+	INTVAL = AnnotationUtils.fromClass(elements, IntVal.class);
+	ARRAYLEN = AnnotationUtils.fromClass(elements, ArrayLen.class);
 	
 	this.postInit();
     }
@@ -51,10 +61,15 @@ public class ArraySafetyAnnotatedTypeFactory extends GenericAnnotatedTypeFactory
 	AnnotationBuilder builder = new AnnotationBuilder(processingEnv, UnsafeArrayIndex.class);
 	return builder.build();
     }
-    
+   
     private class ArraySafetyTreeAnnotator extends TreeAnnotator {
 	public ArraySafetyTreeAnnotator(AnnotatedTypeFactory aTypeFactory) {
 	    super(aTypeFactory);
+	}
+
+	public List<Long> getIntValues(AnnotatedTypeMirror type) {
+	    AnnotationMirror intAnno = type.getAnnotationInHierarchy(INTVAL);
+	    return AnnotationUtils.getElementValueArray(intAnno, "value", Long.class, true);
 	}
 
 	// Annotate negative integer constants with @UnsafeArrayIndex.
@@ -68,7 +83,39 @@ public class ArraySafetyAnnotatedTypeFactory extends GenericAnnotatedTypeFactory
 		    }
 		}
 	    }
+
+	    GenericAnnotatedTypeFactory<?, ?, ?, ?> valueATF = getTypeFactoryOfSubchecker(ValueChecker.class);
+	    assert valueATF != null : "cannot access ValueChecker annotations";
+	    AnnotatedTypeMirror valueType = valueATF.getAnnotatedType(tree);
+	    if (valueType.hasAnnotation(IntVal.class)) {
+		List<Long> intValues = getIntValues(valueType);
+		for (Long value : intValues) {
+		    if (value < 0L) {
+			type.addAnnotation(createUnsafeArrayIndexAnnotation());
+		    }
+		}
+	    }
+	    
 	    return super.visitLiteral(tree, type);
+	}
+
+	@Override
+	public Void visitArrayAccess(ArrayAccessTree tree, AnnotatedTypeMirror type) {
+	    GenericAnnotatedTypeFactory<?, ?, ?, ?> valueATF = getTypeFactoryOfSubchecker(ValueChecker.class);
+	    assert valueATF != null : "cannot access ValueChecker annotations";
+
+	    ExpressionTree arrayTree = tree.getExpression();
+	    AnnotatedTypeMirror arrayType = valueATF.getAnnotatedType(arrayTree);
+
+	    ExpressionTree indexTree = tree.getIndex();
+	    AnnotatedTypeMirror indexType = valueATF.getAnnotatedType(indexTree);
+
+	    if (arrayType.hasAnnotation(ArrayLen.class) && indexType.hasAnnotation(IntVal.class)) {
+		// TODO bounds check
+		//type.addAnnotation(createUnsafeArrayIndexAnnotation());
+	    }
+	    
+	    return super.visitArrayAccess(tree, type);
 	}
 	
     }
