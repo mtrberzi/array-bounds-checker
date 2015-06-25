@@ -13,4 +13,10 @@ public class Simple {
 	//:: error: (array.access.unsafe)
 	foo[-1] = 9001;
     }
+
+    void unsafeStore_ConstantPropagation() {
+	int[] foo = new int[3];
+	//:: error: (array.access.unsafe)
+	foo[4] = 9001;
+    }
 }
