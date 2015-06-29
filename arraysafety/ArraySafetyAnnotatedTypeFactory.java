@@ -30,12 +30,14 @@ import com.sun.source.tree.ExpressionTree;
 
 public class ArraySafetyAnnotatedTypeFactory extends GenericAnnotatedTypeFactory<CFValue, CFStore, ArraySafetyTransfer, ArraySafetyAnalysis> {
 
+    protected final AnnotationMirror UNSAFE_ARRAY_ACCESS;
     protected final AnnotationMirror INTVAL;
     protected final AnnotationMirror ARRAYLEN;
     
     public ArraySafetyAnnotatedTypeFactory(BaseTypeChecker checker) {
 	super(checker);
 
+	UNSAFE_ARRAY_ACCESS = AnnotationUtils.fromClass(elements, UnsafeArrayAccess.class);
 	INTVAL = AnnotationUtils.fromClass(elements, IntVal.class);
 	ARRAYLEN = AnnotationUtils.fromClass(elements, ArrayLen.class);
 	
@@ -71,19 +73,21 @@ public class ArraySafetyAnnotatedTypeFactory extends GenericAnnotatedTypeFactory
 	}
 
 	@Override
-	public Void visitArrayAccess(ArrayAccessTree tree, AnnotatedTypeMirror type) {   
-	    GenericAnnotatedTypeFactory<?, ?, ?, ?> valueATF = getTypeFactoryOfSubchecker(ValueChecker.class);
-	    assert valueATF != null : "cannot access ValueChecker annotations";
+	public Void visitArrayAccess(ArrayAccessTree tree, AnnotatedTypeMirror type) {
+	    if (!type.isAnnotatedInHierarchy(UNSAFE_ARRAY_ACCESS)) {
+		GenericAnnotatedTypeFactory<?, ?, ?, ?> valueATF = getTypeFactoryOfSubchecker(ValueChecker.class);
+		assert valueATF != null : "cannot access ValueChecker annotations";
+		
+		ExpressionTree arrayTree = tree.getExpression();
+		AnnotatedTypeMirror arrayType = valueATF.getAnnotatedType(arrayTree);
 
-	    ExpressionTree arrayTree = tree.getExpression();
-	    AnnotatedTypeMirror arrayType = valueATF.getAnnotatedType(arrayTree);
+		ExpressionTree indexTree = tree.getIndex();
+		AnnotatedTypeMirror indexType = valueATF.getAnnotatedType(indexTree);
 
-	    ExpressionTree indexTree = tree.getIndex();
-	    AnnotatedTypeMirror indexType = valueATF.getAnnotatedType(indexTree);
-
-	    if (arrayType.hasAnnotation(ArrayLen.class) && indexType.hasAnnotation(IntVal.class)) {
-		// TODO bounds check
-		type.addAnnotation(createUnsafeArrayAccessAnnotation());
+		if (arrayType.hasAnnotation(ArrayLen.class) && indexType.hasAnnotation(IntVal.class)) {
+		    // TODO bounds check
+		    type.addAnnotation(createUnsafeArrayAccessAnnotation());
+		}
 	    }
 	    
 	    return super.visitArrayAccess(tree, type);
