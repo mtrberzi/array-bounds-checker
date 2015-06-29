@@ -26,8 +26,7 @@ public class ArraySafetyVisitor extends BaseTypeVisitor<ArraySafetyAnnotatedType
 	AnnotatedTypeMirror arrayType = atypeFactory.getAnnotatedType(array);
 	AnnotatedTypeMirror indexType = atypeFactory.getAnnotatedType(index);
 
-	// if the index is unsafe in general (i.e. no parameters), it is unsafe here
-	if (indexType.hasAnnotation(UnsafeArrayIndex.class)) {
+	if (arrayType.hasAnnotation(UnsafeArrayAccess.class)) {
 	    checker.report(Result.failure("array.access.unsafe"), node);
 	}
 

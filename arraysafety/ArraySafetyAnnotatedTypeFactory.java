@@ -30,14 +30,12 @@ import com.sun.source.tree.ExpressionTree;
 
 public class ArraySafetyAnnotatedTypeFactory extends GenericAnnotatedTypeFactory<CFValue, CFStore, ArraySafetyTransfer, ArraySafetyAnalysis> {
 
-    protected final AnnotationMirror UNSAFE_ARRAY_INDEX;
     protected final AnnotationMirror INTVAL;
     protected final AnnotationMirror ARRAYLEN;
     
     public ArraySafetyAnnotatedTypeFactory(BaseTypeChecker checker) {
 	super(checker);
 
-	UNSAFE_ARRAY_INDEX = AnnotationUtils.fromClass(elements, UnsafeArrayIndex.class);
 	INTVAL = AnnotationUtils.fromClass(elements, IntVal.class);
 	ARRAYLEN = AnnotationUtils.fromClass(elements, ArrayLen.class);
 	
@@ -57,8 +55,8 @@ public class ArraySafetyAnnotatedTypeFactory extends GenericAnnotatedTypeFactory
 				     );
     }
 
-    AnnotationMirror createUnsafeArrayIndexAnnotation() {
-	AnnotationBuilder builder = new AnnotationBuilder(processingEnv, UnsafeArrayIndex.class);
+    AnnotationMirror createUnsafeArrayAccessAnnotation() {
+	AnnotationBuilder builder = new AnnotationBuilder(processingEnv, UnsafeArrayAccess.class);
 	return builder.build();
     }
    
@@ -72,35 +70,8 @@ public class ArraySafetyAnnotatedTypeFactory extends GenericAnnotatedTypeFactory
 	    return AnnotationUtils.getElementValueArray(intAnno, "value", Long.class, true);
 	}
 
-	// Annotate negative integer constants with @UnsafeArrayIndex.
 	@Override
-	public Void visitLiteral(LiteralTree tree, AnnotatedTypeMirror type) {
-	    if (!type.isAnnotatedInHierarchy(UNSAFE_ARRAY_INDEX)) {
-		if (tree.getKind() == Tree.Kind.INT_LITERAL) {
-		    Integer lit = (Integer)tree.getValue();
-		    if (lit < 0) {
-			type.addAnnotation(createUnsafeArrayIndexAnnotation());
-		    }
-		}
-	    }
-
-	    GenericAnnotatedTypeFactory<?, ?, ?, ?> valueATF = getTypeFactoryOfSubchecker(ValueChecker.class);
-	    assert valueATF != null : "cannot access ValueChecker annotations";
-	    AnnotatedTypeMirror valueType = valueATF.getAnnotatedType(tree);
-	    if (valueType.hasAnnotation(IntVal.class)) {
-		List<Long> intValues = getIntValues(valueType);
-		for (Long value : intValues) {
-		    if (value < 0L) {
-			type.addAnnotation(createUnsafeArrayIndexAnnotation());
-		    }
-		}
-	    }
-	    
-	    return super.visitLiteral(tree, type);
-	}
-
-	@Override
-	public Void visitArrayAccess(ArrayAccessTree tree, AnnotatedTypeMirror type) {
+	public Void visitArrayAccess(ArrayAccessTree tree, AnnotatedTypeMirror type) {   
 	    GenericAnnotatedTypeFactory<?, ?, ?, ?> valueATF = getTypeFactoryOfSubchecker(ValueChecker.class);
 	    assert valueATF != null : "cannot access ValueChecker annotations";
 
@@ -112,7 +83,7 @@ public class ArraySafetyAnnotatedTypeFactory extends GenericAnnotatedTypeFactory
 
 	    if (arrayType.hasAnnotation(ArrayLen.class) && indexType.hasAnnotation(IntVal.class)) {
 		// TODO bounds check
-		//type.addAnnotation(createUnsafeArrayIndexAnnotation());
+		type.addAnnotation(createUnsafeArrayAccessAnnotation());
 	    }
 	    
 	    return super.visitArrayAccess(tree, type);
