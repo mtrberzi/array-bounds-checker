@@ -10,7 +10,7 @@ import org.checkerframework.framework.qual.SubtypeOf;
 import org.checkerframework.framework.qual.TypeQualifier;
 
 @TypeQualifier
-@SubtypeOf(UnknownArraySafety.class)
+@SubtypeOf(UnknownArrayAccess.class)
 @Retention(RetentionPolicy.RUNTIME)
 @Target({ElementType.TYPE_USE, ElementType.TYPE_PARAMETER})
-public @interface SafeArrayIndex {}
+public @interface SafeArrayAccess {}

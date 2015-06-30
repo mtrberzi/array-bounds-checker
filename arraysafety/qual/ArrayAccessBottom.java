@@ -15,7 +15,7 @@ import com.sun.source.tree.Tree;
 @InvisibleQualifier
 @ImplicitFor(trees = {Tree.Kind.NULL_LITERAL},
 	     typeNames = {java.lang.Void.class})
-	     @SubtypeOf({SafeArrayIndex.class,UnsafeArrayIndex.class})
+	     @SubtypeOf({SafeArrayAccess.class,UnsafeArrayAccess.class})
 	     @DefaultFor(value={DefaultLocation.LOWER_BOUNDS})
 	     @Target({}) // empty target prevents programmers from writing this in a program
-	     public @interface ArraySafetyBottom {}
+	     public @interface ArrayAccessBottom {}

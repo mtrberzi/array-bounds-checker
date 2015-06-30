@@ -15,6 +15,7 @@ import org.checkerframework.javacutil.AnnotationUtils;
 import org.checkerframework.framework.util.AnnotationBuilder;
 import org.checkerframework.common.value.ValueChecker;
 import org.checkerframework.common.value.ValueCheckerUtils;
+import org.checkerframework.framework.source.Result;
 import org.checkerframework.common.value.qual.IntVal;
 import org.checkerframework.common.value.qual.ArrayLen;
 
@@ -30,14 +31,14 @@ import com.sun.source.tree.ExpressionTree;
 
 public class ArraySafetyAnnotatedTypeFactory extends GenericAnnotatedTypeFactory<CFValue, CFStore, ArraySafetyTransfer, ArraySafetyAnalysis> {
 
-    protected final AnnotationMirror UNSAFE_ARRAY_INDEX;
+    protected final AnnotationMirror UNSAFE_ARRAY_ACCESS;
     protected final AnnotationMirror INTVAL;
     protected final AnnotationMirror ARRAYLEN;
     
     public ArraySafetyAnnotatedTypeFactory(BaseTypeChecker checker) {
 	super(checker);
 
-	UNSAFE_ARRAY_INDEX = AnnotationUtils.fromClass(elements, UnsafeArrayIndex.class);
+	UNSAFE_ARRAY_ACCESS = AnnotationUtils.fromClass(elements, UnsafeArrayAccess.class);
 	INTVAL = AnnotationUtils.fromClass(elements, IntVal.class);
 	ARRAYLEN = AnnotationUtils.fromClass(elements, ArrayLen.class);
 	
@@ -57,8 +58,13 @@ public class ArraySafetyAnnotatedTypeFactory extends GenericAnnotatedTypeFactory
 				     );
     }
 
-    AnnotationMirror createUnsafeArrayIndexAnnotation() {
-	AnnotationBuilder builder = new AnnotationBuilder(processingEnv, UnsafeArrayIndex.class);
+    AnnotationMirror createUnsafeArrayAccessAnnotation() {
+	AnnotationBuilder builder = new AnnotationBuilder(processingEnv, UnsafeArrayAccess.class);
+	return builder.build();
+    }
+
+    AnnotationMirror createSafeArrayAccessAnnotation() {
+	AnnotationBuilder builder = new AnnotationBuilder(processingEnv, SafeArrayAccess.class);
 	return builder.build();
     }
    
@@ -72,47 +78,48 @@ public class ArraySafetyAnnotatedTypeFactory extends GenericAnnotatedTypeFactory
 	    return AnnotationUtils.getElementValueArray(intAnno, "value", Long.class, true);
 	}
 
-	// Annotate negative integer constants with @UnsafeArrayIndex.
-	@Override
-	public Void visitLiteral(LiteralTree tree, AnnotatedTypeMirror type) {
-	    if (!type.isAnnotatedInHierarchy(UNSAFE_ARRAY_INDEX)) {
-		if (tree.getKind() == Tree.Kind.INT_LITERAL) {
-		    Integer lit = (Integer)tree.getValue();
-		    if (lit < 0) {
-			type.addAnnotation(createUnsafeArrayIndexAnnotation());
-		    }
-		}
-	    }
-
-	    GenericAnnotatedTypeFactory<?, ?, ?, ?> valueATF = getTypeFactoryOfSubchecker(ValueChecker.class);
-	    assert valueATF != null : "cannot access ValueChecker annotations";
-	    AnnotatedTypeMirror valueType = valueATF.getAnnotatedType(tree);
-	    if (valueType.hasAnnotation(IntVal.class)) {
-		List<Long> intValues = getIntValues(valueType);
-		for (Long value : intValues) {
-		    if (value < 0L) {
-			type.addAnnotation(createUnsafeArrayIndexAnnotation());
-		    }
-		}
-	    }
-	    
-	    return super.visitLiteral(tree, type);
+	public List<Integer> getArrayLengths(AnnotatedTypeMirror type) {
+	    AnnotationMirror arrAnno = type.getAnnotationInHierarchy(ARRAYLEN);
+	    return AnnotationUtils.getElementValueArray(arrAnno, "value", Integer.class, true);
 	}
 
 	@Override
 	public Void visitArrayAccess(ArrayAccessTree tree, AnnotatedTypeMirror type) {
-	    GenericAnnotatedTypeFactory<?, ?, ?, ?> valueATF = getTypeFactoryOfSubchecker(ValueChecker.class);
-	    assert valueATF != null : "cannot access ValueChecker annotations";
+	    if (/*!type.isAnnotatedInHierarchy(UNSAFE_ARRAY_ACCESS)*/true) {
+		GenericAnnotatedTypeFactory<?, ?, ?, ?> valueATF = getTypeFactoryOfSubchecker(ValueChecker.class);
+		assert valueATF != null : "cannot access ValueChecker annotations";
+		
+		ExpressionTree arrayTree = tree.getExpression();
+		AnnotatedTypeMirror arrayType = valueATF.getAnnotatedType(arrayTree);
 
-	    ExpressionTree arrayTree = tree.getExpression();
-	    AnnotatedTypeMirror arrayType = valueATF.getAnnotatedType(arrayTree);
-
-	    ExpressionTree indexTree = tree.getIndex();
-	    AnnotatedTypeMirror indexType = valueATF.getAnnotatedType(indexTree);
-
-	    if (arrayType.hasAnnotation(ArrayLen.class) && indexType.hasAnnotation(IntVal.class)) {
-		// TODO bounds check
-		//type.addAnnotation(createUnsafeArrayIndexAnnotation());
+		ExpressionTree indexTree = tree.getIndex();
+		AnnotatedTypeMirror indexType = valueATF.getAnnotatedType(indexTree);
+		
+		if (indexType.hasAnnotation(IntVal.class)) {
+		    List<Long> indexValues = getIntValues(indexType);
+		    if (arrayType.hasAnnotation(ArrayLen.class)) {
+			List<Integer> arrayLengths = getArrayLengths(arrayType);
+			boolean definitelyUnsafe = false;
+			for (Long idx : indexValues) {
+			    for (Integer i_len : arrayLengths) {
+				Long len = new Long(i_len);
+				if (idx >= len) {
+				    definitelyUnsafe = true;
+				    break;
+				}
+			    }
+			}
+			if (definitelyUnsafe) {
+			    checker.report(Result.failure("array.access.unsafe"), tree);
+			}
+		    }
+		    // if the index could possibly be negative, it is unsafe
+		    for (Long idx : indexValues) {
+		    	if (idx < 0) {
+			    checker.report(Result.failure("array.access.unsafe"), tree);
+		    	}
+		    }
+		}
 	    }
 	    
 	    return super.visitArrayAccess(tree, type);

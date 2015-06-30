@@ -7,12 +7,11 @@ import org.checkerframework.common.value.ValueChecker;
 
 import java.util.LinkedHashSet;
 
-import org.checkerframework.checker.arraysafety.qual.UnknownArraySafety;
-import org.checkerframework.checker.arraysafety.qual.SafeArrayIndex;
-import org.checkerframework.checker.arraysafety.qual.UnsafeArrayIndex;
-import org.checkerframework.checker.arraysafety.qual.ArraySafetyBottom;
+import org.checkerframework.checker.arraysafety.qual.*;
 
-@TypeQualifiers({UnknownArraySafety.class,SafeArrayIndex.class,UnsafeArrayIndex.class,ArraySafetyBottom.class})
+@TypeQualifiers({
+	/*	UnknownArraySafety.class,SafeArrayIndex.class,UnsafeArrayIndex.class,ArraySafetyBottom.class,*/
+	    UnknownArrayAccess.class,SafeArrayAccess.class,UnsafeArrayAccess.class,ArrayAccessBottom.class})
 public class ArraySafetyChecker extends BaseTypeChecker {
     protected LinkedHashSet<Class<? extends BaseTypeChecker>> getImmediateSubcheckerClasses() {
 	LinkedHashSet<Class<? extends BaseTypeChecker>> subcheckers = new LinkedHashSet<>();
