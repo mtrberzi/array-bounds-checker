@@ -15,6 +15,7 @@ import org.checkerframework.javacutil.AnnotationUtils;
 import org.checkerframework.framework.util.AnnotationBuilder;
 import org.checkerframework.common.value.ValueChecker;
 import org.checkerframework.common.value.ValueCheckerUtils;
+import org.checkerframework.framework.source.Result;
 import org.checkerframework.common.value.qual.IntVal;
 import org.checkerframework.common.value.qual.ArrayLen;
 
@@ -109,15 +110,13 @@ public class ArraySafetyAnnotatedTypeFactory extends GenericAnnotatedTypeFactory
 			    }
 			}
 			if (definitelyUnsafe) {
-			    type.replaceAnnotation(createUnsafeArrayAccessAnnotation());
-			} else {
-			    type.replaceAnnotation(createSafeArrayAccessAnnotation());
+			    checker.report(Result.failure("array.access.unsafe"), tree);
 			}
 		    }
 		    // if the index could possibly be negative, it is unsafe
 		    for (Long idx : indexValues) {
 		    	if (idx < 0) {
-		    	    type.replaceAnnotation(createUnsafeArrayAccessAnnotation());
+			    checker.report(Result.failure("array.access.unsafe"), tree);
 		    	}
 		    }
 		}
