@@ -61,6 +61,11 @@ public class ArraySafetyAnnotatedTypeFactory extends GenericAnnotatedTypeFactory
 	AnnotationBuilder builder = new AnnotationBuilder(processingEnv, UnsafeArrayAccess.class);
 	return builder.build();
     }
+
+    AnnotationMirror createSafeArrayAccessAnnotation() {
+	AnnotationBuilder builder = new AnnotationBuilder(processingEnv, SafeArrayAccess.class);
+	return builder.build();
+    }
    
     private class ArraySafetyTreeAnnotator extends TreeAnnotator {
 	public ArraySafetyTreeAnnotator(AnnotatedTypeFactory aTypeFactory) {
@@ -72,9 +77,14 @@ public class ArraySafetyAnnotatedTypeFactory extends GenericAnnotatedTypeFactory
 	    return AnnotationUtils.getElementValueArray(intAnno, "value", Long.class, true);
 	}
 
+	public List<Integer> getArrayLengths(AnnotatedTypeMirror type) {
+	    AnnotationMirror arrAnno = type.getAnnotationInHierarchy(ARRAYLEN);
+	    return AnnotationUtils.getElementValueArray(arrAnno, "value", Integer.class, true);
+	}
+
 	@Override
 	public Void visitArrayAccess(ArrayAccessTree tree, AnnotatedTypeMirror type) {
-	    if (!type.isAnnotatedInHierarchy(UNSAFE_ARRAY_ACCESS)) {
+	    if (/*!type.isAnnotatedInHierarchy(UNSAFE_ARRAY_ACCESS)*/true) {
 		GenericAnnotatedTypeFactory<?, ?, ?, ?> valueATF = getTypeFactoryOfSubchecker(ValueChecker.class);
 		assert valueATF != null : "cannot access ValueChecker annotations";
 		
@@ -83,10 +93,33 @@ public class ArraySafetyAnnotatedTypeFactory extends GenericAnnotatedTypeFactory
 
 		ExpressionTree indexTree = tree.getIndex();
 		AnnotatedTypeMirror indexType = valueATF.getAnnotatedType(indexTree);
-
-		if (arrayType.hasAnnotation(ArrayLen.class) && indexType.hasAnnotation(IntVal.class)) {
-		    // TODO bounds check
-		    type.addAnnotation(createUnsafeArrayAccessAnnotation());
+		
+		if (indexType.hasAnnotation(IntVal.class)) {
+		    List<Long> indexValues = getIntValues(indexType);
+		    if (arrayType.hasAnnotation(ArrayLen.class)) {
+			List<Integer> arrayLengths = getArrayLengths(arrayType);
+			boolean definitelyUnsafe = false;
+			for (Long idx : indexValues) {
+			    for (Integer i_len : arrayLengths) {
+				Long len = new Long(i_len);
+				if (idx >= len) {
+				    definitelyUnsafe = true;
+				    break;
+				}
+			    }
+			}
+			if (definitelyUnsafe) {
+			    type.replaceAnnotation(createUnsafeArrayAccessAnnotation());
+			} else {
+			    type.replaceAnnotation(createSafeArrayAccessAnnotation());
+			}
+		    }
+		    // if the index could possibly be negative, it is unsafe
+		    for (Long idx : indexValues) {
+		    	if (idx < 0) {
+		    	    type.replaceAnnotation(createUnsafeArrayAccessAnnotation());
+		    	}
+		    }
 		}
 	    }
 	    
