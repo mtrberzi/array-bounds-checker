@@ -19,4 +19,21 @@ public class Simple {
 	//:: error: (array.access.unsafe)
 	foo[4] = 9001;
     }
+
+    int safeLoad() {
+	int[] foo = new int[3];
+	return foo[0];
+    }
+
+    int unsafeLoad() {
+	int[] foo = new int[3];
+	//:: error: (array.access.unsafe)
+	return foo[-1];
+    }
+
+    int unsafeLoad_ConstantPropagation() {
+	int[] foo = new int[3];
+	//:: error: (array.access.unsafe)
+	return foo[4];
+    }
 }
