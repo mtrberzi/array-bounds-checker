@@ -13,4 +13,6 @@ import org.checkerframework.framework.qual.TypeQualifier;
 @SubtypeOf(UnknownArrayAccess.class)
 @Retention(RetentionPolicy.RUNTIME)
 @Target({ElementType.TYPE_USE, ElementType.TYPE_PARAMETER})
-public @interface UnsafeArrayAccess {}
+public @interface UnsafeArrayAccess {
+    String[] value();
+}

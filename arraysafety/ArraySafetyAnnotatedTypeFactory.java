@@ -20,6 +20,9 @@ import org.checkerframework.common.value.qual.IntVal;
 import org.checkerframework.common.value.qual.ArrayLen;
 
 import java.util.List;
+import java.util.ArrayList;
+import java.util.Set;
+import java.util.HashSet;
 import org.checkerframework.javacutil.Pair;
 import javax.lang.model.element.VariableElement;
 import javax.lang.model.element.AnnotationMirror;
@@ -59,12 +62,24 @@ public class ArraySafetyAnnotatedTypeFactory extends GenericAnnotatedTypeFactory
     }
 
     AnnotationMirror createUnsafeArrayAccessAnnotation() {
+	return createUnsafeArrayAccessAnnotation(new HashSet<String>());
+    }
+
+    AnnotationMirror createUnsafeArrayAccessAnnotation(Set<String> values) {
 	AnnotationBuilder builder = new AnnotationBuilder(processingEnv, UnsafeArrayAccess.class);
+	List<String> valuesList = new ArrayList<String>(values);
+	builder.setValue("value", valuesList);
 	return builder.build();
     }
 
     AnnotationMirror createSafeArrayAccessAnnotation() {
+	return createSafeArrayAccessAnnotation(new HashSet<String>());
+    }
+    
+    AnnotationMirror createSafeArrayAccessAnnotation(Set<String> values) {
 	AnnotationBuilder builder = new AnnotationBuilder(processingEnv, SafeArrayAccess.class);
+	List<String> valuesList = new ArrayList<String>(values);
+	builder.setValue("value", valuesList);
 	return builder.build();
     }
    
