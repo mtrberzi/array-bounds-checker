@@ -89,6 +89,22 @@ public class ArraySafetyTransfer extends CFAbstractTransfer<CFValue, CFStore, Ar
 	    return false;
 	}
     }
+
+    /* 
+     * requires: nodeIsGEZero(node) == true
+     * returns: EXPR in (EXPR >= 0) or (0 <= EXPR)
+     */
+    private Node extractGEZeroExpr(Node node) {
+	if (node instanceof GreaterThanOrEqualNode) {
+	    GreaterThanOrEqualNode ge = (GreaterThanOrEqualNode)node;
+	    return ge.getLeftOperand();
+	} else if (node instanceof LessThanOrEqualNode) {
+	    LessThanOrEqualNode le = (LessThanOrEqualNode)node;
+	    return le.getRightOperand();
+	} else {
+	    throw new IllegalArgumentException("internal error: precondition failed");
+	}
+    }
     
     /*
      * returns: true iff the given node is an expression of the form
@@ -113,6 +129,40 @@ public class ArraySafetyTransfer extends CFAbstractTransfer<CFValue, CFStore, Ar
 	    return false;
 	}
     }
+
+    /*
+     * requires: nodeIsLTArrayLength(node) == true
+     * returns: EXPR in (EXPR < ARRAY.length) or (ARRAY.length > EXPR)
+     */
+    private Node extractLTArrayLengthExpr(Node node) {
+	if (node instanceof LessThanNode) {
+	    LessThanNode lt = (LessThanNode)node;
+	    return lt.getLeftOperand();
+	} else if (node instanceof GreaterThanNode) {
+	    GreaterThanNode gt = (GreaterThanNode)node;
+	    return gt.getRightOperand();
+	} else {
+	    throw new IllegalArgumentException("internal error: precondition failed");
+	}
+    }
+
+    /*
+     * requires: nodeIsLTArrayLength(node) == true
+     * returns: ARRAY in (EXPR < ARRAY.length) or (ARRAY.length > EXPR)
+     */
+    private Node extractLTArrayLengthArray(Node node) {
+	if (node instanceof LessThanNode) {
+	    LessThanNode lt = (LessThanNode)node;
+	    FieldAccessNode fieldAccess = (FieldAccessNode)lt.getRightOperand();
+	    return fieldAccess.getReceiver();
+	} else if (node instanceof GreaterThanNode) {
+	    GreaterThanNode gt = (GreaterThanNode)node;
+	    FieldAccessNode fieldAccess = (FieldAccessNode)gt.getLeftOperand();
+	    return fieldAccess.getReceiver();
+	} else {
+	    throw new IllegalArgumentException("internal error: precondition failed");
+	}
+    }
     
     public TransferResult<CFValue, CFStore>
 	visitConditionalAnd(ConditionalAndNode n, TransferInput<CFValue, CFStore> p) {
@@ -123,7 +173,12 @@ public class ArraySafetyTransfer extends CFAbstractTransfer<CFValue, CFStore, Ar
 	Node rhs = n.getRightOperand();
 
 	if (nodeIsGEZero(lhs) && nodeIsLTArrayLength(rhs)) {
-	    throw new UnsupportedOperationException("bogus 1");
+	    Node expr1 = extractGEZeroExpr(lhs);
+	    Node expr2 = extractLTArrayLengthExpr(rhs);
+	    if (expr1.equals(expr2)) {
+		Node arrayExpr = extractLTArrayLengthArray(rhs);
+		throw new UnsupportedOperationException("bogus 1");
+	    }
 	} else if (nodeIsLTArrayLength(lhs) && nodeIsGEZero(rhs)) {
 	    throw new UnsupportedOperationException("bogus 2");
 	}
