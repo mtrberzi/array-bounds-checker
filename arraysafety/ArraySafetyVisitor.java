@@ -20,10 +20,11 @@ public class ArraySafetyVisitor extends BaseTypeVisitor<ArraySafetyAnnotatedType
 
     @Override
     public Void visitArrayAccess(ArrayAccessTree node, Void p) {
-	/*
 	AnnotatedTypeMirror exprType = atypeFactory.getAnnotatedType(node);
-	
+	System.out.println("*** " + exprType.getAnnotations().toString());
+	/*
 	if (exprType.hasAnnotation(UnsafeArrayAccess.class)) {
+	    // TODO check which array is being accessed
 	    checker.report(Result.failure("array.access.unsafe"), node);
 	}
 

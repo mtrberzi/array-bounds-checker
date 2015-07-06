@@ -176,7 +176,6 @@ public class ArraySafetyTransfer extends CFAbstractTransfer<CFValue, CFStore, Ar
 	// I >= 0 && I < A.length
 	Node lhs = n.getLeftOperand();
 	Node rhs = n.getRightOperand();
-
 	if (nodeIsGEZero(lhs) && nodeIsLTArrayLength(rhs)) {
 	    Node idxExpr = extractGEZeroExpr(lhs);
 	    Node idxExpr2 = extractLTArrayLengthExpr(rhs);
@@ -193,7 +192,8 @@ public class ArraySafetyTransfer extends CFAbstractTransfer<CFValue, CFStore, Ar
 		
 		if (arrayRef == null) {
 		    // couldn't figure out a good name for this array
-		    return result;
+		    //return result;
+		    throw new IllegalStateException("internal error: could not find usable arrayRef");
 		}
 
 		CFValue value = p.getValueOfSubNode(idxExpr);
@@ -224,7 +224,7 @@ public class ArraySafetyTransfer extends CFAbstractTransfer<CFValue, CFStore, Ar
 		thenStore.insertValue(indexReceiver, createSafeArrayAccessAnnotation(safeArrays));
 		// in the 'else' store, idxExpr is unsafe wrt. arrayExpr
 		elseStore.insertValue(indexReceiver, createUnsafeArrayAccessAnnotation(unsafeArrays));
-
+		
 		return new ConditionalTransferResult<>(result.getResultValue(), thenStore, elseStore);
 	    }
 	} else if (nodeIsLTArrayLength(lhs) && nodeIsGEZero(rhs)) {
