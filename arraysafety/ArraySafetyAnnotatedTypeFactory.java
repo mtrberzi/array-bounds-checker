@@ -18,6 +18,11 @@ import org.checkerframework.common.value.ValueCheckerUtils;
 import org.checkerframework.framework.source.Result;
 import org.checkerframework.common.value.qual.IntVal;
 import org.checkerframework.common.value.qual.ArrayLen;
+import org.checkerframework.framework.util.MultiGraphQualifierHierarchy;
+import org.checkerframework.framework.util.MultiGraphQualifierHierarchy.MultiGraphFactory;
+import org.checkerframework.framework.util.defaults.QualifierDefaults;
+import org.checkerframework.framework.qual.DefaultLocation;
+import org.checkerframework.framework.type.QualifierHierarchy;
 
 import java.util.List;
 import java.util.ArrayList;
@@ -37,10 +42,16 @@ public class ArraySafetyAnnotatedTypeFactory extends GenericAnnotatedTypeFactory
     protected final AnnotationMirror UNSAFE_ARRAY_ACCESS;
     protected final AnnotationMirror INTVAL;
     protected final AnnotationMirror ARRAYLEN;
+
+    protected final AnnotationMirror UNKNOWNSAFETY;
+    protected final AnnotationMirror BOTTOMSAFETY;
     
     public ArraySafetyAnnotatedTypeFactory(BaseTypeChecker checker) {
 	super(checker);
 
+	UNKNOWNSAFETY = AnnotationUtils.fromClass(elements, UnknownArrayAccess.class);
+	BOTTOMSAFETY = AnnotationUtils.fromClass(elements, ArrayAccessBottom.class);
+	
 	UNSAFE_ARRAY_ACCESS = AnnotationUtils.fromClass(elements, UnsafeArrayAccess.class);
 	INTVAL = AnnotationUtils.fromClass(elements, IntVal.class);
 	ARRAYLEN = AnnotationUtils.fromClass(elements, ArrayLen.class);
@@ -61,6 +72,20 @@ public class ArraySafetyAnnotatedTypeFactory extends GenericAnnotatedTypeFactory
 				     );
     }
 
+    @Override
+    public QualifierHierarchy createQualifierHierarchy(MultiGraphFactory factory) {
+	return new ArraySafetyQualifierHierarchy(factory);
+    }
+
+    @Override
+    protected QualifierDefaults createQualifierDefaults() {
+	QualifierDefaults defaults = super.createQualifierDefaults();
+	defaults.addAbsoluteDefault(UNKNOWNSAFETY, DefaultLocation.OTHERWISE);
+	defaults.addAbsoluteDefault(BOTTOMSAFETY, DefaultLocation.LOWER_BOUNDS);
+
+	return defaults;
+    }
+    
     AnnotationMirror createUnsafeArrayAccessAnnotation() {
 	return createUnsafeArrayAccessAnnotation(new HashSet<String>());
     }
@@ -82,7 +107,14 @@ public class ArraySafetyAnnotatedTypeFactory extends GenericAnnotatedTypeFactory
 	builder.setValue("value", valuesList);
 	return builder.build();
     }
-   
+
+    private AnnotationMirror createAnnotation(String name, Set<String> values) {
+	AnnotationBuilder builder = new AnnotationBuilder(processingEnv, name);
+	List<String> valuesList = new ArrayList<String>(values);
+	builder.setValue("value", valuesList);
+	return builder.build();
+    }
+    
     private class ArraySafetyTreeAnnotator extends TreeAnnotator {
 	public ArraySafetyTreeAnnotator(AnnotatedTypeFactory aTypeFactory) {
 	    super(aTypeFactory);
@@ -138,6 +170,95 @@ public class ArraySafetyAnnotatedTypeFactory extends GenericAnnotatedTypeFactory
 	    }
 	    
 	    return super.visitArrayAccess(tree, type);
+	}	
+    }
+
+    private final class ArraySafetyQualifierHierarchy extends MultiGraphQualifierHierarchy {
+
+	public ArraySafetyQualifierHierarchy(MultiGraphQualifierHierarchy.MultiGraphFactory factory) {
+	    super(factory);
+	}
+
+	@Override
+        public AnnotationMirror greatestLowerBound(AnnotationMirror a1,
+                AnnotationMirror a2) {
+            if (isSubtype(a1, a2)) {
+                return a1;
+            } else if (isSubtype(a2, a1)) {
+                return a2;
+            } else {
+                // If the two are unrelated, then bottom is the GLB.
+                return BOTTOMSAFETY;
+            }
+        }
+
+	/**
+	 * Determines the least upper bound of a1 and a2.
+	 * If a1 and a2 are the same type of ArraySafety annotation, the LUB
+	 * is the result of taking all values from both a1 and a2 and removing all duplicates.
+	 */
+	@Override
+	public AnnotationMirror leastUpperBound(AnnotationMirror a1, AnnotationMirror a2) {
+	    if (!AnnotationUtils.areSameIgnoringValues(getTopAnnotation(a1), getTopAnnotation(a2))) {
+		return null;
+	    } else if (isSubtype(a1, a2)) {
+		return a2;
+	    } else if (isSubtype(a2, a1)) {
+		return a1;
+	    }
+	    // if both are the same type, determine that type and then merge
+	    else if (AnnotationUtils.areSameIgnoringValues(a1, a2)) {
+		List<String> a1Values = AnnotationUtils.getElementValueArray(a1, "value", String.class, true);
+		List<String> a2Values = AnnotationUtils.getElementValueArray(a2, "value", String.class, true);
+		HashSet<String> newValues = new HashSet<String>(a1Values.size() + a2Values.size());
+
+		// if either of the original value sets are empty, that means "any"
+		// which is always a strict upper bound
+		if (!(a1Values.isEmpty()) && !(a2Values.isEmpty())) {
+		    newValues.addAll(a1Values);
+		    newValues.addAll(a2Values);
+		}
+		return createAnnotation(a1.getAnnotationType().toString(), newValues);
+	    }
+	    // annotations are in this hierarchy but not the same
+	    else {
+		// if either is UNKNOWNSAFETY then the LUB is UNKNOWNSAFETY
+		if (AnnotationUtils.areSameByClass(a1, UnknownArrayAccess.class)
+		    || AnnotationUtils.areSameByClass(a2, UnknownArrayAccess.class)) {
+		    return UNKNOWNSAFETY;
+		} else {
+		    // we don't know what to do here
+		    return UNKNOWNSAFETY;
+		}
+	    }
+	}
+
+	/**
+         * Computes subtyping as per the subtyping in the qualifier hierarchy
+         * structure unless both annotations are Safe/UnsafeAccess. In this case, rhs is a
+         * subtype of lhs iff lhs contains at least every element of rhs
+	 * or lhs has no elements (unrestricted safety)
+         *
+         * @return true if rhs is a subtype of lhs, false otherwise
+         */
+        @Override
+        public boolean isSubtype(AnnotationMirror rhs, AnnotationMirror lhs) {
+	    if (AnnotationUtils.areSameByClass(lhs, UnknownArrayAccess.class)
+		|| AnnotationUtils.areSameByClass(rhs, ArrayAccessBottom.class)) {
+		return true;
+	    } else if (AnnotationUtils.areSameByClass(rhs, UnknownArrayAccess.class)
+		       || AnnotationUtils.areSameByClass(lhs, ArrayAccessBottom.class)) {
+		return false;
+	    } else if (AnnotationUtils.areSameIgnoringValues(lhs, rhs)) {
+		// same type, so check subtype
+		List<String> lhsValues = AnnotationUtils.getElementValueArray(lhs, "value", String.class, true);
+		List<String> rhsValues = AnnotationUtils.getElementValueArray(rhs, "value", String.class, true);
+		if (lhsValues.isEmpty()) {
+		    return true;
+		} else return lhsValues.containsAll(rhsValues);
+	    } else {
+		return false;
+	    }
 	}
 	
     }

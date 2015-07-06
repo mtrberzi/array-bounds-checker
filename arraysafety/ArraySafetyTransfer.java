@@ -1,9 +1,12 @@
 package org.checkerframework.checker.arraysafety;
 
 import java.util.Set;
+import java.util.HashSet;
 import javax.lang.model.element.AnnotationMirror;
 import javax.lang.model.type.TypeMirror;
 import javax.lang.model.type.ArrayType;
+import javax.lang.model.element.Element;
+import javax.lang.model.element.Name;
 import org.checkerframework.framework.type.AnnotatedTypeFactory;
 import org.checkerframework.framework.flow.CFAbstractTransfer;
 import org.checkerframework.framework.flow.CFStore;
@@ -12,6 +15,8 @@ import org.checkerframework.dataflow.analysis.TransferResult;
 import org.checkerframework.dataflow.analysis.ConditionalTransferResult;
 import org.checkerframework.dataflow.analysis.TransferInput;
 import org.checkerframework.dataflow.cfg.node.*;
+import org.checkerframework.dataflow.analysis.FlowExpressions;
+import org.checkerframework.checker.arraysafety.qual.*;
 
 public class ArraySafetyTransfer extends CFAbstractTransfer<CFValue, CFStore, ArraySafetyTransfer> {
 
@@ -173,11 +178,54 @@ public class ArraySafetyTransfer extends CFAbstractTransfer<CFValue, CFStore, Ar
 	Node rhs = n.getRightOperand();
 
 	if (nodeIsGEZero(lhs) && nodeIsLTArrayLength(rhs)) {
-	    Node expr1 = extractGEZeroExpr(lhs);
-	    Node expr2 = extractLTArrayLengthExpr(rhs);
-	    if (expr1.equals(expr2)) {
+	    Node idxExpr = extractGEZeroExpr(lhs);
+	    Node idxExpr2 = extractLTArrayLengthExpr(rhs);
+	    if (idxExpr.equals(idxExpr2)) {		
 		Node arrayExpr = extractLTArrayLengthArray(rhs);
-		throw new UnsupportedOperationException("bogus 1");
+		// figure out what array is being referred to
+		FlowExpressions.Receiver arrayReceiver = FlowExpressions.internalReprOf(analysis.getTypeFactory(), arrayExpr);
+		String arrayRef = null;
+		if (arrayReceiver instanceof FlowExpressions.LocalVariable) {
+		    FlowExpressions.LocalVariable var = (FlowExpressions.LocalVariable)arrayReceiver;
+		    Element varEl = var.getElement();
+		    arrayRef = varEl.getSimpleName().toString();
+		}
+		
+		if (arrayRef == null) {
+		    // couldn't figure out a good name for this array
+		    return result;
+		}
+
+		CFValue value = p.getValueOfSubNode(idxExpr);
+		boolean knownSafe = false;
+		boolean knownUnsafe = false;
+
+		AnnotationMirror safetyAnno = value.getType().getAnnotation(SafeArrayAccess.class);
+		if (safetyAnno != null) {
+		    knownSafe = true;
+		}
+
+		safetyAnno = value.getType().getAnnotation(UnsafeArrayAccess.class);
+		if (safetyAnno != null) {
+		    knownUnsafe = true;
+		}
+		
+		// TODO preserve existing safety/unsafety information
+		Set<String> safeArrays = new HashSet<String>();
+		safeArrays.add(arrayRef);
+		Set<String> unsafeArrays = new HashSet<String>();
+		unsafeArrays.add(arrayRef);
+		
+		CFStore thenStore = result.getThenStore();
+		CFStore elseStore = result.getElseStore();
+		FlowExpressions.Receiver indexReceiver = FlowExpressions.internalReprOf(analysis.getTypeFactory(), idxExpr);
+		
+		// in the 'then' store, idxExpr is safe wrt. arrayExpr
+		thenStore.insertValue(indexReceiver, createSafeArrayAccessAnnotation(safeArrays));
+		// in the 'else' store, idxExpr is unsafe wrt. arrayExpr
+		elseStore.insertValue(indexReceiver, createUnsafeArrayAccessAnnotation(unsafeArrays));
+
+		return new ConditionalTransferResult<>(result.getResultValue(), thenStore, elseStore);
 	    }
 	} else if (nodeIsLTArrayLength(lhs) && nodeIsGEZero(rhs)) {
 	    throw new UnsupportedOperationException("bogus 2");
