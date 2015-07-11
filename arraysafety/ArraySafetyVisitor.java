@@ -17,5 +17,28 @@ public class ArraySafetyVisitor extends BaseTypeVisitor<ArraySafetyAnnotatedType
     public ArraySafetyVisitor(BaseTypeChecker checker) {
 	super(checker);
     }
+
+    @Override
+    public Void visitArrayAccess(ArrayAccessTree node, Void p) {
+	ExpressionTree array = node.getExpression();
+	ExpressionTree index = node.getIndex();
+
+	AnnotatedTypeMirror arrayType = atypeFactory.getAnnotatedType(array);
+	AnnotatedTypeMirror indexType = atypeFactory.getAnnotatedType(index);
+
+	System.out.println("*** " + arrayType.getAnnotations().toString());
+	System.out.println("*** " + indexType.getAnnotations().toString());
+
+	if (arrayType.hasAnnotation(Bounded.class) && indexType.hasAnnotation(Unbounded.class)) {
+	    checker.report(Result.failure("array.access.unsafe"), node);
+	} else if (arrayType.hasAnnotation(Bounded.class) && indexType.hasAnnotation(Bounded.class)) {
+	    // TODO subtype test
+	} else if (arrayType.hasAnnotation(Unbounded.class)) {
+	    // counts as a warning because we can't prove whether the access is safe
+	    checker.report(Result.warning("array.access.unknown"), node);
+	}
+
+	return super.visitArrayAccess(node, p);
+    }
     
 }
