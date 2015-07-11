@@ -36,6 +36,7 @@ import com.sun.source.tree.LiteralTree;
 import com.sun.source.tree.Tree;
 import com.sun.source.tree.ArrayAccessTree;
 import com.sun.source.tree.ExpressionTree;
+import com.sun.source.tree.NewArrayTree;
 
 public class ArraySafetyAnnotatedTypeFactory extends GenericAnnotatedTypeFactory<CFValue, CFStore, ArraySafetyTransfer, ArraySafetyAnalysis> {
 
@@ -84,30 +85,6 @@ public class ArraySafetyAnnotatedTypeFactory extends GenericAnnotatedTypeFactory
 	return defaults;
     }
 
-    /*
-    AnnotationMirror createUnsafeArrayAccessAnnotation() {
-	return createUnsafeArrayAccessAnnotation(new HashSet<String>());
-    }
-
-    AnnotationMirror createUnsafeArrayAccessAnnotation(Set<String> values) {
-	AnnotationBuilder builder = new AnnotationBuilder(processingEnv, UnsafeArrayAccess.class);
-	List<String> valuesList = new ArrayList<String>(values);
-	builder.setValue("value", valuesList);
-	return builder.build();
-    }
-
-    AnnotationMirror createSafeArrayAccessAnnotation() {
-	return createSafeArrayAccessAnnotation(new HashSet<String>());
-    }
-    
-    AnnotationMirror createSafeArrayAccessAnnotation(Set<String> values) {
-	AnnotationBuilder builder = new AnnotationBuilder(processingEnv, SafeArrayAccess.class);
-	List<String> valuesList = new ArrayList<String>(values);
-	builder.setValue("value", valuesList);
-	return builder.build();
-    }
-    */
-
     AnnotationMirror createBoundedAnnotation(Integer lowerBound, Integer upperBound) {
 	AnnotationBuilder builder = new AnnotationBuilder(processingEnv, Bounded.class);
 	builder.setValue("lowerBound", lowerBound);
@@ -119,7 +96,39 @@ public class ArraySafetyAnnotatedTypeFactory extends GenericAnnotatedTypeFactory
 	public ArraySafetyTreeAnnotator(AnnotatedTypeFactory aTypeFactory) {
 	    super(aTypeFactory);
 	}
-	/*
+
+	@Override
+	public Void visitNewArray(NewArrayTree tree, AnnotatedTypeMirror type) {
+	    GenericAnnotatedTypeFactory<?, ?, ?, ?> valueATF = getTypeFactoryOfSubchecker(ValueChecker.class);
+	    assert valueATF != null : "cannot access ValueChecker annotations";
+	    if (tree.getDimensions().size() > 1) {
+		throw new UnsupportedOperationException("cannot handle multidimensional arrays");
+	    }
+	    ExpressionTree dimension = tree.getDimensions().get(0);
+	    AnnotatedTypeMirror dimensionValueType = valueATF.getAnnotatedType(dimension);
+	    if (dimensionValueType.hasAnnotation(IntVal.class)) {
+		List<Long> indexValues = getIntValues(dimensionValueType);
+		// TODO check if the index could be negative
+		// the minimum value in this list is the lower bound;
+		// the maximum value in this list is the upper bound
+		Integer lowerBound = indexValues.get(0).intValue();
+		Integer upperBound = indexValues.get(0).intValue();
+		for (int i = 1; i < indexValues.size(); ++i) {
+		    Integer x = indexValues.get(i).intValue();
+		    if (x < lowerBound) {
+			lowerBound = x;
+		    }
+		    if (x > upperBound) {
+			upperBound = x;
+		    }
+		}
+		type.replaceAnnotation(createBoundedAnnotation(lowerBound, upperBound));
+	    } // TODO else cases
+	    
+	    return super.visitNewArray(tree, type);
+	}
+	
+	
 	public List<Long> getIntValues(AnnotatedTypeMirror type) {
 	    AnnotationMirror intAnno = type.getAnnotationInHierarchy(INTVAL);
 	    return AnnotationUtils.getElementValueArray(intAnno, "value", Long.class, true);
@@ -129,7 +138,7 @@ public class ArraySafetyAnnotatedTypeFactory extends GenericAnnotatedTypeFactory
 	    AnnotationMirror arrAnno = type.getAnnotationInHierarchy(ARRAYLEN);
 	    return AnnotationUtils.getElementValueArray(arrAnno, "value", Integer.class, true);
 	}
-
+	/*
 	@Override
 	public Void visitArrayAccess(ArrayAccessTree tree, AnnotatedTypeMirror type) {
 	    if (!type.isAnnotatedInHierarchy(UNSAFE_ARRAY_ACCESS)true) {

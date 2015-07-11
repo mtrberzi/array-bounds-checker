@@ -14,6 +14,6 @@ import org.checkerframework.framework.qual.TypeQualifier;
 @Retention(RetentionPolicy.RUNTIME)
 @Target({ElementType.TYPE_USE, ElementType.TYPE_PARAMETER})
 public @interface Bounded {
-    Integer lowerBound = Integer.MIN_VALUE;
-    Integer upperBound = Integer.MAX_VALUE;
+    int lowerBound();
+    int upperBound();
 }
