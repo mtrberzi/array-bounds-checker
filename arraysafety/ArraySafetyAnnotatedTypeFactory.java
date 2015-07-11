@@ -171,8 +171,9 @@ public class ArraySafetyAnnotatedTypeFactory extends GenericAnnotatedTypeFactory
 	    
 	    return super.visitArrayAccess(tree, type);
 	}	
-    }
 	*/
+    }
+	
 
     private final class ArraySafetyQualifierHierarchy extends MultiGraphQualifierHierarchy {
 
@@ -219,7 +220,7 @@ public class ArraySafetyAnnotatedTypeFactory extends GenericAnnotatedTypeFactory
 		Integer newLowerBound = Integer.min(L1, L2);
 		Integer newUpperBound = Integer.max(U1, U2);
 		
-		return createBoundedAnnotation(a1.getAnnotationType().toString(), newLowerBound, newUpperBound);
+		return createBoundedAnnotation(newLowerBound, newUpperBound);
 	    }
 	    // annotations are in this hierarchy but not the same
 	    else {
