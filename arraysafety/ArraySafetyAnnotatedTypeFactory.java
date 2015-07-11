@@ -32,11 +32,7 @@ import org.checkerframework.javacutil.Pair;
 import javax.lang.model.element.VariableElement;
 import javax.lang.model.element.AnnotationMirror;
 
-import com.sun.source.tree.LiteralTree;
-import com.sun.source.tree.Tree;
-import com.sun.source.tree.ArrayAccessTree;
-import com.sun.source.tree.ExpressionTree;
-import com.sun.source.tree.NewArrayTree;
+import com.sun.source.tree.*;
 
 public class ArraySafetyAnnotatedTypeFactory extends GenericAnnotatedTypeFactory<CFValue, CFStore, ArraySafetyTransfer, ArraySafetyAnalysis> {
 
@@ -98,6 +94,32 @@ public class ArraySafetyAnnotatedTypeFactory extends GenericAnnotatedTypeFactory
 	}
 
 	@Override
+	public Void visitAssignment(AssignmentTree tree, AnnotatedTypeMirror type) {
+	    GenericAnnotatedTypeFactory<?, ?, ?, ?> valueATF = getTypeFactoryOfSubchecker(ValueChecker.class);
+	    assert valueATF != null : "cannot access ValueChecker annotations";
+
+	    ExpressionTree expr = tree.getExpression();
+	    AnnotatedTypeMirror exprValueType = valueATF.getAnnotatedType(expr);
+	    AnnotatedTypeMirror exprBoundsType = atypeFactory.getAnnotatedType(expr);
+
+	    if (exprValueType.hasAnnotation(IntVal.class)) {
+		type.replaceAnnotation(createBoundedAnnotationFromIntVal(exprValueType));
+	    } // TODO else
+	    
+	    return super.visitAssignment(tree, type);
+	}
+
+	@Override
+	public Void visitLiteral(LiteralTree tree, AnnotatedTypeMirror type) {
+	    Tree.Kind kind = tree.getKind();
+	    if (kind.equals(Tree.Kind.INT_LITERAL)) {
+		Integer literal = (Integer)tree.getValue();
+		type.replaceAnnotation(createBoundedAnnotation(literal, literal));
+	    }
+	    return super.visitLiteral(tree, type);
+	}
+	
+	@Override
 	public Void visitNewArray(NewArrayTree tree, AnnotatedTypeMirror type) {
 	    GenericAnnotatedTypeFactory<?, ?, ?, ?> valueATF = getTypeFactoryOfSubchecker(ValueChecker.class);
 	    assert valueATF != null : "cannot access ValueChecker annotations";
@@ -106,28 +128,66 @@ public class ArraySafetyAnnotatedTypeFactory extends GenericAnnotatedTypeFactory
 	    }
 	    ExpressionTree dimension = tree.getDimensions().get(0);
 	    AnnotatedTypeMirror dimensionValueType = valueATF.getAnnotatedType(dimension);
+	    AnnotatedTypeMirror dimensionBoundsType = atypeFactory.getAnnotatedType(dimension);
 	    if (dimensionValueType.hasAnnotation(IntVal.class)) {
 		List<Long> indexValues = getIntValues(dimensionValueType);
 		// TODO check if the index could be negative
-		// the minimum value in this list is the lower bound;
-		// the maximum value in this list is the upper bound
-		Integer lowerBound = indexValues.get(0).intValue();
-		Integer upperBound = indexValues.get(0).intValue();
-		for (int i = 1; i < indexValues.size(); ++i) {
-		    Integer x = indexValues.get(i).intValue();
-		    if (x < lowerBound) {
-			lowerBound = x;
-		    }
-		    if (x > upperBound) {
-			upperBound = x;
-		    }
-		}
+		type.replaceAnnotation(createBoundedAnnotationFromIntVal(dimensionValueType));
+	    } else if (dimensionBoundsType.hasAnnotation(Bounded.class)) {
+		Integer lowerBound = getLowerBound(dimensionBoundsType);
+		Integer upperBound = getUpperBound(dimensionBoundsType);
 		type.replaceAnnotation(createBoundedAnnotation(lowerBound, upperBound));
-	    } // TODO else cases
-	    
+	    } else if (dimensionBoundsType.hasAnnotation(Unbounded.class)) {
+		type.replaceAnnotation(UNBOUNDED);
+	    }
 	    return super.visitNewArray(tree, type);
 	}
+
+	@Override
+	public Void visitVariable(VariableTree tree, AnnotatedTypeMirror type) {
+	    GenericAnnotatedTypeFactory<?, ?, ?, ?> valueATF = getTypeFactoryOfSubchecker(ValueChecker.class);
+	    assert valueATF != null : "cannot access ValueChecker annotations";
+
+	    ExpressionTree expr = tree.getInitializer();
+	    if (expr != null) {
+		AnnotatedTypeMirror exprValueType = valueATF.getAnnotatedType(expr);
+		AnnotatedTypeMirror exprBoundsType = atypeFactory.getAnnotatedType(expr);
+
+		if (exprValueType.hasAnnotation(IntVal.class)) {
+		    type.replaceAnnotation(createBoundedAnnotationFromIntVal(exprValueType));
+		} // TODO else
+	    } // expr != null
+	    
+	    return super.visitVariable(tree, type);
+	}
 	
+	public AnnotationMirror createBoundedAnnotationFromIntVal(AnnotatedTypeMirror intValType) {
+	    List<Long> indexValues = getIntValues(intValType);
+	    // the minimum value in this list is the lower bound;
+	    // the maximum value in this list is the upper bound
+	    Integer lowerBound = indexValues.get(0).intValue();
+	    Integer upperBound = indexValues.get(0).intValue();
+	    for (int i = 1; i < indexValues.size(); ++i) {
+		Integer x = indexValues.get(i).intValue();
+		if (x < lowerBound) {
+		    lowerBound = x;
+		}
+		if (x > upperBound) {
+		    upperBound = x;
+		}
+	    }
+	    return createBoundedAnnotation(lowerBound, upperBound);
+	}
+	
+	public Integer getLowerBound(AnnotatedTypeMirror type) {
+	    AnnotationMirror boundedAnno = type.getAnnotationInHierarchy(UNBOUNDED);
+	    return AnnotationUtils.getElementValue(boundedAnno, "lowerBound", Integer.class, true);
+	}
+	
+	public Integer getUpperBound(AnnotatedTypeMirror type) {
+	    AnnotationMirror boundedAnno = type.getAnnotationInHierarchy(UNBOUNDED);
+	    return AnnotationUtils.getElementValue(boundedAnno, "upperBound", Integer.class, true);
+	}
 	
 	public List<Long> getIntValues(AnnotatedTypeMirror type) {
 	    AnnotationMirror intAnno = type.getAnnotationInHierarchy(INTVAL);
