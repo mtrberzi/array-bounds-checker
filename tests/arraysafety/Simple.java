@@ -1,6 +1,3 @@
-import org.checkerframework.checker.arraysafety.qual.SafeArrayIndex;
-import org.checkerframework.checker.arraysafety.qual.UnsafeArrayIndex;
-
 public class Simple {
     
     void safeStore() {
