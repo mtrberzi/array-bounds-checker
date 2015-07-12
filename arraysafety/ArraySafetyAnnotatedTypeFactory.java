@@ -5,6 +5,8 @@ import org.checkerframework.checker.arraysafety.qual.*;
 import org.checkerframework.framework.type.GenericAnnotatedTypeFactory;
 import org.checkerframework.framework.flow.CFStore;
 import org.checkerframework.framework.flow.CFValue;
+import org.checkerframework.framework.flow.CFTransfer;
+import org.checkerframework.framework.flow.CFAbstractAnalysis;
 import org.checkerframework.common.basetype.BaseTypeChecker;
 import org.checkerframework.framework.type.treeannotator.ImplicitsTreeAnnotator;
 import org.checkerframework.framework.type.treeannotator.ListTreeAnnotator;
@@ -100,7 +102,8 @@ public class ArraySafetyAnnotatedTypeFactory extends GenericAnnotatedTypeFactory
 		Integer literal = (Integer)tree.getValue();
 		type.replaceAnnotation(createBoundedAnnotation(literal, literal));
 	    }
-	    return super.visitLiteral(tree, type);
+	    //return super.visitLiteral(tree, type);
+	    return null;
 	}
 	
 	@Override
@@ -124,13 +127,12 @@ public class ArraySafetyAnnotatedTypeFactory extends GenericAnnotatedTypeFactory
 	    } else if (dimensionBoundsType.hasAnnotation(Unbounded.class)) {
 		type.replaceAnnotation(UNBOUNDED);
 	    }
-	    return super.visitNewArray(tree, type);
+	    //return super.visitNewArray(tree, type);
+	    return null;
 	}
 		
 	public AnnotationMirror createBoundedAnnotationFromIntVal(AnnotatedTypeMirror intValType) {
-	    System.out.println("deriving bounds from IntVal");
 	    List<Long> indexValues = getIntValues(intValType);
-	    System.out.println("values are " + indexValues.toString());
 	    // the minimum value in this list is the lower bound;
 	    // the maximum value in this list is the upper bound
 	    Integer lowerBound = indexValues.get(0).intValue();
@@ -144,7 +146,6 @@ public class ArraySafetyAnnotatedTypeFactory extends GenericAnnotatedTypeFactory
 		    upperBound = x;
 		}
 	    }
-	    System.out.println("final bound is [" + lowerBound + ", " + upperBound + "]");
 	    return createBoundedAnnotation(lowerBound, upperBound);
 	}
 	
@@ -277,7 +278,7 @@ public class ArraySafetyAnnotatedTypeFactory extends GenericAnnotatedTypeFactory
          * Computes subtyping as per the subtyping in the qualifier hierarchy
          * structure unless both annotations are Safe/UnsafeAccess. 
 	 * In this case, rhs is a subtype of lhs
-	 * iff rhs contains all the values in lhs's bounds.
+	 * iff lhs contains at least every element of rhs
          *
          * @return true if rhs is a subtype of lhs, false otherwise
          */
@@ -296,7 +297,7 @@ public class ArraySafetyAnnotatedTypeFactory extends GenericAnnotatedTypeFactory
 		Integer Ulhs = AnnotationUtils.getElementValue(lhs, "upperBound", Integer.class, true);
 		Integer Urhs = AnnotationUtils.getElementValue(rhs, "upperBound", Integer.class, true);
 
-		return ( (Llhs <= Lrhs) && (Urhs >= Ulhs) );
+		return (Llhs <= Lrhs) && (Urhs <= Ulhs);
 		
 	    } else {
 		return false;
