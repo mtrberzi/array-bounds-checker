@@ -86,6 +86,29 @@ public class ArraySafetyTransfer extends CFAbstractTransfer<CFValue, CFStore, Ar
 	Long max = Long.valueOf(Integer.MAX_VALUE);
 	return (value < min || value > max);
     }
+
+    @Override
+    public TransferResult<CFValue, CFStore> visitNumericalAddition(NumericalAdditionNode n, TransferInput<CFValue, CFStore> p) {
+	TransferResult<CFValue, CFStore> transferResult = super.visitNumericalAddition(n, p);
+	Node lhs = n.getLeftOperand();
+	Node rhs = n.getRightOperand();
+	if (isUnbounded(lhs, p) || isUnbounded(rhs, p)) {
+	    return createNewResult(transferResult);
+	} else {
+	    Long Llhs = getLowerBound(lhs, p).longValue();
+	    Long Lrhs = getLowerBound(rhs, p).longValue();
+	    Long Ulhs = getUpperBound(lhs, p).longValue();
+	    Long Urhs = getUpperBound(rhs, p).longValue();
+
+	    Long newLowerBound = Llhs + Lrhs;
+	    Long newUpperBound = Ulhs + Urhs;
+	    if (notAnInteger(newLowerBound) || notAnInteger(newUpperBound)) {
+		return createNewResult(transferResult);
+	    } else {
+		return createNewResult(transferResult, newLowerBound.intValue(), newUpperBound.intValue());
+	    }
+	}
+    }
     
     @Override
     public TransferResult<CFValue, CFStore> visitNumericalSubtraction(NumericalSubtractionNode n, TransferInput<CFValue, CFStore> p) {

@@ -15,7 +15,19 @@ public class Flow {
 	array[x] = 9001;
     }
 
-    void conditionalRefinementMinus(boolean b) {
+    void dataflowAddition(boolean b) {
+	int[] array = new int[3];
+	int x = -1;
+	if (b) {
+	    x = 0;
+	}
+	// now x is bounded by [-1, 0]
+	x = x + 1;
+	// now x is bounded by [0, 1]
+	array[x] = 42;
+    }
+    
+    void dataflowSubtraction(boolean b) {
 	int[] array = new int[9];
 	int x = 8;
 	if (b) {
