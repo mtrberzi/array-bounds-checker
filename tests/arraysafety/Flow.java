@@ -15,4 +15,16 @@ public class Flow {
 	array[x] = 9001;
     }
 
+    void conditionalRefinementMinus(boolean b) {
+	int[] array = new int[9];
+	int x = 8;
+	if (b) {
+	    x = 9;
+	}
+	// now x is bounded by [8, 9]
+	x = x - 1;
+	// now x is bounded by [7, 8]
+	array[x] = 42;
+    }
+    
 }
