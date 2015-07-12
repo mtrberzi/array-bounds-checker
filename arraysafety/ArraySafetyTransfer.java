@@ -109,6 +109,25 @@ public class ArraySafetyTransfer extends CFAbstractTransfer<CFValue, CFStore, Ar
 	    }
 	}
     }
+
+    @Override
+    public TransferResult<CFValue, CFStore> visitNumericalMinus(NumericalMinusNode n, TransferInput<CFValue, CFStore> p) {
+	TransferResult<CFValue, CFStore> transferResult = super.visitNumericalMinus(n, p);
+	Node expr = n.getOperand();
+	if (isUnbounded(expr, p)) {
+	    return createNewResult(transferResult);
+	} else {
+	    Long L = getLowerBound(expr, p).longValue();
+	    Long U = getUpperBound(expr, p).longValue();
+	    Long newLowerBound = -U;
+	    Long newUpperBound = -L;
+	    if (notAnInteger(newLowerBound) || notAnInteger(newUpperBound)) {
+		return createNewResult(transferResult);
+	    } else {
+		return createNewResult(transferResult, newLowerBound.intValue(), newUpperBound.intValue());
+	    }
+	}
+    }
     
     @Override
     public TransferResult<CFValue, CFStore> visitNumericalSubtraction(NumericalSubtractionNode n, TransferInput<CFValue, CFStore> p) {
@@ -132,4 +151,5 @@ public class ArraySafetyTransfer extends CFAbstractTransfer<CFValue, CFStore, Ar
 	    }
 	}
     }
+
 }

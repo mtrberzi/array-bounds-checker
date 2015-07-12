@@ -26,6 +26,18 @@ public class Flow {
 	// now x is bounded by [0, 1]
 	array[x] = 42;
     }
+
+    void dataflowMinus(boolean b) {
+	int[] array = new int[3];
+	int x = -1;
+	if (b) {
+	    x = 0;
+	}
+	// x : [-1, 0]
+	x = -x;
+	// x : [0, 1]
+	array[x] = 42;
+    }
     
     void dataflowSubtraction(boolean b) {
 	int[] array = new int[9];
