@@ -50,5 +50,18 @@ public class Flow {
 	// now x is bounded by [7, 8]
 	array[x] = 42;
     }
+
+    void dataflowGreaterThanOrEqual(boolean b) {
+	int[] array = new int[5];
+	int x = -3;
+	if (b) {
+	    x = 3;
+	}
+	// x : [-3, 3]
+	if (x >= 0) {
+	    // x : [0, 3]
+	    array[x] = 42;
+	}
+    }
     
 }

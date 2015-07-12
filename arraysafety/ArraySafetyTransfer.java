@@ -17,6 +17,7 @@ import org.checkerframework.dataflow.analysis.RegularTransferResult;
 import org.checkerframework.dataflow.analysis.TransferInput;
 import org.checkerframework.dataflow.cfg.node.*;
 import org.checkerframework.dataflow.analysis.FlowExpressions;
+import org.checkerframework.dataflow.analysis.FlowExpressions.Receiver;
 import org.checkerframework.checker.arraysafety.qual.*;
 import org.checkerframework.javacutil.AnnotationUtils;
 
@@ -87,6 +88,31 @@ public class ArraySafetyTransfer extends CFAbstractTransfer<CFValue, CFStore, Ar
 	return (value < min || value > max);
     }
 
+    @Override
+    public TransferResult<CFValue, CFStore> visitGreaterThanOrEqual(GreaterThanOrEqualNode n, TransferInput<CFValue, CFStore> p) {
+	TransferResult<CFValue, CFStore> transferResult = super.visitGreaterThanOrEqual(n, p);
+	Node lhs = n.getLeftOperand();
+	Node rhs = n.getRightOperand();
+	if (isUnbounded(lhs, p) || isUnbounded(rhs, p)) {
+	    return createNewResult(transferResult);
+	} else {
+	    System.out.println("!!! both bounded in >= transfer function");
+	    // TODO actually compare the ranges
+	    // for now we'll just say that the LHS is [-50, -50] in both branches
+	    CFStore thenStore = transferResult.getRegularStore();
+	    CFStore elseStore = thenStore.copy();
+	    Receiver lhsReceiver = FlowExpressions.internalReprOf(analysis.getTypeFactory(), lhs);
+	    System.out.println("!!! before add: lhsReceiver has value " + thenStore.getValue(lhsReceiver).toString());
+
+	    CFValue v = analysis.createSingleAnnotationValue(createBoundedAnnotation(-50, -50), lhsReceiver.getType());
+	    
+	    thenStore.replaceValue(lhsReceiver, v);
+	    elseStore.replaceValue(lhsReceiver, v);
+	    System.out.println("!!! after add: lhsReceiver has value " + thenStore.getValue(lhsReceiver).toString());
+	    return new ConditionalTransferResult<>(transferResult.getResultValue(), thenStore, elseStore);
+	}
+    }
+    
     @Override
     public TransferResult<CFValue, CFStore> visitNumericalAddition(NumericalAdditionNode n, TransferInput<CFValue, CFStore> p) {
 	TransferResult<CFValue, CFStore> transferResult = super.visitNumericalAddition(n, p);
