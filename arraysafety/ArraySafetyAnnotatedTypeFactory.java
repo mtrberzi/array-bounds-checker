@@ -94,22 +94,6 @@ public class ArraySafetyAnnotatedTypeFactory extends GenericAnnotatedTypeFactory
 	}
 
 	@Override
-	public Void visitAssignment(AssignmentTree tree, AnnotatedTypeMirror type) {
-	    GenericAnnotatedTypeFactory<?, ?, ?, ?> valueATF = getTypeFactoryOfSubchecker(ValueChecker.class);
-	    assert valueATF != null : "cannot access ValueChecker annotations";
-
-	    ExpressionTree expr = tree.getExpression();
-	    AnnotatedTypeMirror exprValueType = valueATF.getAnnotatedType(expr);
-	    AnnotatedTypeMirror exprBoundsType = atypeFactory.getAnnotatedType(expr);
-
-	    if (exprValueType.hasAnnotation(IntVal.class)) {
-		type.replaceAnnotation(createBoundedAnnotationFromIntVal(exprValueType));
-	    } // TODO else
-	    
-	    return super.visitAssignment(tree, type);
-	}
-
-	@Override
 	public Void visitLiteral(LiteralTree tree, AnnotatedTypeMirror type) {
 	    Tree.Kind kind = tree.getKind();
 	    if (kind.equals(Tree.Kind.INT_LITERAL)) {
@@ -142,27 +126,11 @@ public class ArraySafetyAnnotatedTypeFactory extends GenericAnnotatedTypeFactory
 	    }
 	    return super.visitNewArray(tree, type);
 	}
-
-	@Override
-	public Void visitVariable(VariableTree tree, AnnotatedTypeMirror type) {
-	    GenericAnnotatedTypeFactory<?, ?, ?, ?> valueATF = getTypeFactoryOfSubchecker(ValueChecker.class);
-	    assert valueATF != null : "cannot access ValueChecker annotations";
-
-	    ExpressionTree expr = tree.getInitializer();
-	    if (expr != null) {
-		AnnotatedTypeMirror exprValueType = valueATF.getAnnotatedType(expr);
-		AnnotatedTypeMirror exprBoundsType = atypeFactory.getAnnotatedType(expr);
-
-		if (exprValueType.hasAnnotation(IntVal.class)) {
-		    type.replaceAnnotation(createBoundedAnnotationFromIntVal(exprValueType));
-		} // TODO else
-	    } // expr != null
-	    
-	    return super.visitVariable(tree, type);
-	}
-	
+		
 	public AnnotationMirror createBoundedAnnotationFromIntVal(AnnotatedTypeMirror intValType) {
+	    System.out.println("deriving bounds from IntVal");
 	    List<Long> indexValues = getIntValues(intValType);
+	    System.out.println("values are " + indexValues.toString());
 	    // the minimum value in this list is the lower bound;
 	    // the maximum value in this list is the upper bound
 	    Integer lowerBound = indexValues.get(0).intValue();
@@ -176,6 +144,7 @@ public class ArraySafetyAnnotatedTypeFactory extends GenericAnnotatedTypeFactory
 		    upperBound = x;
 		}
 	    }
+	    System.out.println("final bound is [" + lowerBound + ", " + upperBound + "]");
 	    return createBoundedAnnotation(lowerBound, upperBound);
 	}
 	
