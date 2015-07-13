@@ -114,10 +114,10 @@ public class ArraySafetyTransfer extends CFAbstractTransfer<CFValue, CFStore, Ar
 		    // is the lower bound of the LHS
 		    CFValue trueBound = toCFValue(createBoundedAnnotation(lhsLowerBound, Integer.MAX_VALUE), rhsReceiver);
 		    thenStore.replaceValue(rhsReceiver, trueBound);
-		    // if the comparison is false, the upper bound for the RHS
-		    // is one less than the lower bound of the LHS
-		    if (lhsLowerBound != Integer.MIN_VALUE) {
-			CFValue falseBound = toCFValue(createBoundedAnnotation(Integer.MIN_VALUE, lhsLowerBound - 1), rhsReceiver);
+		    // if the comparison is false, the lower bound for the RHS
+		    // is one greater than the lower bound of the LHS
+		    if (lhsLowerBound != Integer.MAX_VALUE) {
+			CFValue falseBound = toCFValue(createBoundedAnnotation(Integer.MIN_VALUE, lhsLowerBound + 1), rhsReceiver);
 			elseStore.replaceValue(rhsReceiver, falseBound);
 		    }
 		} else {
@@ -152,13 +152,29 @@ public class ArraySafetyTransfer extends CFAbstractTransfer<CFValue, CFStore, Ar
 	    }
 	    if (!isUnbounded(rhs, p)) {
 		// we can learn something about the LHS
+		Integer rhsLowerBound = getLowerBound(rhs, p);
+		Integer rhsUpperBound = getUpperBound(rhs, p);
 		Receiver lhsReceiver = FlowExpressions.internalReprOf(analysis.getTypeFactory(), lhs);
+		if (isUnbounded(lhs, p)) {
+		    // infer new bounds:
+		    // if the comparison is true, the lower bound for the LHS
+		    /// is the lower bound for the RHS
+		    CFValue trueBound = toCFValue(createBoundedAnnotation(rhsLowerBound, Integer.MAX_VALUE), lhsReceiver);
+		    thenStore.replaceValue(lhsReceiver, trueBound);
+		    // if the comparison is false, the upper bound for the LHS
+		    // is one less than the lower bound of the RHS
+		    if (rhsLowerBound != Integer.MIN_VALUE) {
+			CFValue falseBound = toCFValue(createBoundedAnnotation(Integer.MIN_VALUE, rhsLowerBound - 1), lhsReceiver);
+			elseStore.replaceValue(lhsReceiver, falseBound);
+		    }
+		} else {
+		    // update existing bounds
+		    // TODO
+		}
 	    }
 	    return new ConditionalTransferResult<>(transferResult.getResultValue(), thenStore, elseStore);
 	}
     }
-
-    // TODO dataflow refinement of [array].length expressions
     
     @Override
     public TransferResult<CFValue, CFStore> visitNumericalAddition(NumericalAdditionNode n, TransferInput<CFValue, CFStore> p) {
