@@ -55,6 +55,10 @@ public class ArraySafetyTransfer extends CFAbstractTransfer<CFValue, CFStore, Ar
 	return new RegularTransferResult<>(newResultValue, result.getRegularStore());
     }
 
+    private CFValue toCFValue(AnnotationMirror a, Receiver r) {
+	return analysis.createSingleAnnotationValue(a, r.getType());
+    }
+    
     private Integer getLowerBound(Node subNode, TransferInput<CFValue, CFStore> p) {
 	CFValue value = p.getValueOfSubNode(subNode);
 	AnnotationMirror boundedAnno = value.getType().getAnnotation(Bounded.class);
@@ -88,30 +92,73 @@ public class ArraySafetyTransfer extends CFAbstractTransfer<CFValue, CFStore, Ar
 	return (value < min || value > max);
     }
 
+    // TODO refactor this into a helper function, I don't want to write this code four times
     @Override
     public TransferResult<CFValue, CFStore> visitGreaterThanOrEqual(GreaterThanOrEqualNode n, TransferInput<CFValue, CFStore> p) {
 	TransferResult<CFValue, CFStore> transferResult = super.visitGreaterThanOrEqual(n, p);
 	Node lhs = n.getLeftOperand();
 	Node rhs = n.getRightOperand();
-	if (isUnbounded(lhs, p) || isUnbounded(rhs, p)) {
+	if (isUnbounded(lhs, p) && isUnbounded(rhs, p)) {
 	    return createNewResult(transferResult);
 	} else {
-	    System.out.println("!!! both bounded in >= transfer function");
-	    // TODO actually compare the ranges
-	    // for now we'll just say that the LHS is [-50, -50] in both branches
 	    CFStore thenStore = transferResult.getRegularStore();
 	    CFStore elseStore = thenStore.copy();
-	    Receiver lhsReceiver = FlowExpressions.internalReprOf(analysis.getTypeFactory(), lhs);
-	    System.out.println("!!! before add: lhsReceiver has value " + thenStore.getValue(lhsReceiver).toString());
-
-	    CFValue v = analysis.createSingleAnnotationValue(createBoundedAnnotation(-50, -50), lhsReceiver.getType());
-	    
-	    thenStore.replaceValue(lhsReceiver, v);
-	    elseStore.replaceValue(lhsReceiver, v);
-	    System.out.println("!!! after add: lhsReceiver has value " + thenStore.getValue(lhsReceiver).toString());
+	    if (!isUnbounded(lhs, p)) {
+		// we can learn something about the RHS
+		Integer lhsLowerBound = getLowerBound(lhs, p);
+		Integer lhsUpperBound = getUpperBound(lhs, p);
+		Receiver rhsReceiver = FlowExpressions.internalReprOf(analysis.getTypeFactory(), rhs);
+		if (isUnbounded(rhs, p)) {
+		    // infer new bounds:
+		    // if the comparison is true, the lower bound for the RHS
+		    // is the lower bound of the LHS
+		    CFValue trueBound = toCFValue(createBoundedAnnotation(lhsLowerBound, Integer.MAX_VALUE), rhsReceiver);
+		    thenStore.replaceValue(rhsReceiver, trueBound);
+		    // if the comparison is false, the upper bound for the RHS
+		    // is one less than the lower bound of the LHS
+		    if (lhsLowerBound != Integer.MIN_VALUE) {
+			CFValue falseBound = toCFValue(createBoundedAnnotation(Integer.MIN_VALUE, lhsLowerBound - 1), rhsReceiver);
+			elseStore.replaceValue(rhsReceiver, falseBound);
+		    }
+		} else {
+		    // update existing bounds
+		    Integer rhsLowerBound = getLowerBound(rhs, p);
+		    Integer rhsUpperBound = getUpperBound(rhs, p);
+		    // there are three cases.
+		    // case 1: the LHS interval is strictly below the RHS interval.
+		    // case 2: the LHS interval is strictly above the RHS interval (or the upper and lower bounds are touching).
+		    // case 3: the LHS interval overlaps the RHS interval.
+		    if (lhsUpperBound < rhsLowerBound) {
+			// case 1
+			// 'then' branch is never taken
+			// TODO
+		    } else if (lhsLowerBound >= rhsUpperBound) {
+			// case 2
+			// 'else' branch is never taken
+			// TODO
+		    } else {
+			// case 3
+			// both branches can be taken
+			// in the true branch, the RHS lower bound stays the same
+			// and the RHS upper bound is equal to the LHS upper bound
+			CFValue trueBound = toCFValue(createBoundedAnnotation(rhsLowerBound, lhsUpperBound), rhsReceiver);
+			thenStore.replaceValue(rhsReceiver, trueBound);
+			// in the false branch, the RHS upper bound stays the same
+			// and the RHS lower bound is one greater than the LHS lower bound
+			CFValue falseBound = toCFValue(createBoundedAnnotation(lhsLowerBound+1, rhsUpperBound), rhsReceiver);
+			elseStore.replaceValue(rhsReceiver, falseBound);
+		    }
+		}
+	    }
+	    if (!isUnbounded(rhs, p)) {
+		// we can learn something about the LHS
+		Receiver lhsReceiver = FlowExpressions.internalReprOf(analysis.getTypeFactory(), lhs);
+	    }
 	    return new ConditionalTransferResult<>(transferResult.getResultValue(), thenStore, elseStore);
 	}
     }
+
+    // TODO dataflow refinement of [array].length expressions
     
     @Override
     public TransferResult<CFValue, CFStore> visitNumericalAddition(NumericalAdditionNode n, TransferInput<CFValue, CFStore> p) {
