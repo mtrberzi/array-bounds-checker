@@ -276,7 +276,7 @@ public class ArraySafetyAnnotatedTypeFactory extends GenericAnnotatedTypeFactory
 
 	/**
          * Computes subtyping as per the subtyping in the qualifier hierarchy
-         * structure unless both annotations are Safe/UnsafeAccess. 
+         * structure unless both annotations are Bounded.
 	 * In this case, rhs is a subtype of lhs
 	 * iff lhs contains at least every element of rhs
          *
