@@ -77,7 +77,7 @@ public class ArrayLengthAnnotatedTypeFactory extends GenericAnnotatedTypeFactory
 	return defaults;
     }
 
-    AnnotationMirror createLessThanAnnotation(Set<String> valueSet) {
+    protected AnnotationMirror createLessThanAnnotation(Set<String> valueSet) {
 	AnnotationBuilder builder = new AnnotationBuilder(processingEnv, LessThanArrayLength.class);
 	List<String> values = new ArrayList<String>(valueSet);
 	builder.setValue("values", values);
