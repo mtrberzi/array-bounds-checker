@@ -10,8 +10,8 @@ import java.util.LinkedHashSet;
 import org.checkerframework.checker.arraysafety.qual.*;
 
 @TypeQualifiers({
-	/*	UnknownArraySafety.class,SafeArrayIndex.class,UnsafeArrayIndex.class,ArraySafetyBottom.class,*/
-	    UnknownArrayAccess.class,SafeArrayAccess.class,UnsafeArrayAccess.class,ArrayAccessBottom.class})
+	Unbounded.class, Bounded.class, BoundsBottom.class
+	    })
 public class ArraySafetyChecker extends BaseTypeChecker {
     protected LinkedHashSet<Class<? extends BaseTypeChecker>> getImmediateSubcheckerClasses() {
 	LinkedHashSet<Class<? extends BaseTypeChecker>> subcheckers = new LinkedHashSet<>();

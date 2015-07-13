@@ -13,10 +13,13 @@ import org.checkerframework.framework.flow.CFStore;
 import org.checkerframework.framework.flow.CFValue;
 import org.checkerframework.dataflow.analysis.TransferResult;
 import org.checkerframework.dataflow.analysis.ConditionalTransferResult;
+import org.checkerframework.dataflow.analysis.RegularTransferResult;
 import org.checkerframework.dataflow.analysis.TransferInput;
 import org.checkerframework.dataflow.cfg.node.*;
 import org.checkerframework.dataflow.analysis.FlowExpressions;
+import org.checkerframework.dataflow.analysis.FlowExpressions.Receiver;
 import org.checkerframework.checker.arraysafety.qual.*;
+import org.checkerframework.javacutil.AnnotationUtils;
 
 public class ArraySafetyTransfer extends CFAbstractTransfer<CFValue, CFStore, ArraySafetyTransfer> {
 
@@ -30,208 +33,196 @@ public class ArraySafetyTransfer extends CFAbstractTransfer<CFValue, CFStore, Ar
 	atypefactory = analysis.getTypeFactory();
     }
 
-    private AnnotationMirror createUnsafeArrayAccessAnnotation(Set<String> values) {
-	return ((ArraySafetyAnnotatedTypeFactory)atypefactory).createUnsafeArrayAccessAnnotation(values);
+    private AnnotationMirror createBoundedAnnotation(Integer lowerBound, Integer upperBound) {
+	return ((ArraySafetyAnnotatedTypeFactory)atypefactory).createBoundedAnnotation(lowerBound, upperBound);
     }
 
-    private AnnotationMirror createSafeArrayAccessAnnotation(Set<String> values) {
-	return ((ArraySafetyAnnotatedTypeFactory)atypefactory).createSafeArrayAccessAnnotation(values);
+    private AnnotationMirror createUnboundedAnnotation() {
+	return ((ArraySafetyAnnotatedTypeFactory)atypefactory).UNBOUNDED;
     }
 
-    /*
-     * returns: true iff the given node is an expression of the form
-     * (EXPR.length) and EXPR has array type
-     */
-    private boolean nodeIsArrayLengthAccess(Node node) {
-	if (!(node instanceof FieldAccessNode)) {
-	    return false;
-	}
-	FieldAccessNode fieldAccess = (FieldAccessNode)node;
-	String field = fieldAccess.getFieldName();
-	if (!(field.equals("length"))) {
-	    return false;
-	}
+    // returns: unbounded result value
+    private TransferResult<CFValue, CFStore> createNewResult(TransferResult<CFValue, CFStore> result) {
+	AnnotationMirror bounds = createUnboundedAnnotation();
+	CFValue newResultValue = analysis.createSingleAnnotationValue(bounds, result.getResultValue().getType().getUnderlyingType());
+	return new RegularTransferResult<>(newResultValue, result.getRegularStore());
+    }
 
-	// type-check expression
-	TypeMirror exprType = fieldAccess.getReceiver().getType();
-	if (!(exprType instanceof ArrayType)) {
-	    return false;
-	}
+    // returns: bounded result value
+    private TransferResult<CFValue, CFStore> createNewResult(TransferResult<CFValue, CFStore> result, Integer lowerBound, Integer upperBound) {
+	AnnotationMirror bounds = createBoundedAnnotation(lowerBound, upperBound);
+	CFValue newResultValue = analysis.createSingleAnnotationValue(bounds, result.getResultValue().getType().getUnderlyingType());
+	return new RegularTransferResult<>(newResultValue, result.getRegularStore());
+    }
 
-	return true;
+    private CFValue toCFValue(AnnotationMirror a, Receiver r) {
+	return analysis.createSingleAnnotationValue(a, r.getType());
     }
     
-    /*
-     * returns: true iff the given node is an expression of the form
-     * (EXPR >= 0) or (0 <= EXPR)
-     */
-    private boolean nodeIsGEZero(Node node) {
-	if (node instanceof GreaterThanOrEqualNode) {
-	    GreaterThanOrEqualNode ge = (GreaterThanOrEqualNode)node;
-	    if (ge.getRightOperand() instanceof IntegerLiteralNode) {
-		IntegerLiteralNode i = (IntegerLiteralNode)ge.getRightOperand();
-		if (i.getValue() == 0) {
-		    return true;
-		} else {
-		    return false;
-		}
-	    } else {
-		return false;
-	    }
-	} else if (node instanceof LessThanOrEqualNode) {
-	    LessThanOrEqualNode le = (LessThanOrEqualNode)node;
-	    if (le.getLeftOperand() instanceof IntegerLiteralNode) {
-		IntegerLiteralNode i = (IntegerLiteralNode)le.getLeftOperand();
-		if (i.getValue() == 0) {
-		    return true;
-		} else {
-		    return false;
-		}
-	    } else {
-		return false;
-	    }
+    private Integer getLowerBound(Node subNode, TransferInput<CFValue, CFStore> p) {
+	CFValue value = p.getValueOfSubNode(subNode);
+	AnnotationMirror boundedAnno = value.getType().getAnnotation(Bounded.class);
+	if (boundedAnno == null) {
+	    throw new IllegalArgumentException("node is not Bounded");
 	} else {
-	    return false;
+	    return AnnotationUtils.getElementValue(boundedAnno, "lowerBound", Integer.class, true);
 	}
     }
 
-    /* 
-     * requires: nodeIsGEZero(node) == true
-     * returns: EXPR in (EXPR >= 0) or (0 <= EXPR)
-     */
-    private Node extractGEZeroExpr(Node node) {
-	if (node instanceof GreaterThanOrEqualNode) {
-	    GreaterThanOrEqualNode ge = (GreaterThanOrEqualNode)node;
-	    return ge.getLeftOperand();
-	} else if (node instanceof LessThanOrEqualNode) {
-	    LessThanOrEqualNode le = (LessThanOrEqualNode)node;
-	    return le.getRightOperand();
+    private Integer getUpperBound(Node subNode, TransferInput<CFValue, CFStore> p) {
+	CFValue value = p.getValueOfSubNode(subNode);
+	AnnotationMirror boundedAnno = value.getType().getAnnotation(Bounded.class);
+	if (boundedAnno == null) {
+	    throw new IllegalArgumentException("node is not Bounded");
 	} else {
-	    throw new IllegalArgumentException("internal error: precondition failed");
-	}
-    }
-    
-    /*
-     * returns: true iff the given node is an expression of the form
-     * (EXPR < EXPR.length) or (EXPR.length > EXPR)
-     */
-    private boolean nodeIsLTArrayLength(Node node) {
-	if (node instanceof LessThanNode) {
-	    LessThanNode lt = (LessThanNode)node;
-	    if (lt.getRightOperand() instanceof FieldAccessNode && nodeIsArrayLengthAccess(lt.getRightOperand())) {
-		return true;
-	    } else {
-		return false;
-	    }
-	} else if (node instanceof GreaterThanNode) {
-	    GreaterThanNode gt = (GreaterThanNode)node;
-	    if (gt.getLeftOperand() instanceof FieldAccessNode && nodeIsArrayLengthAccess(gt.getLeftOperand())) {
-		return true;
-	    } else {
-		return false;
-	    }
-	} else {
-	    return false;
+	    return AnnotationUtils.getElementValue(boundedAnno, "upperBound", Integer.class, true);
 	}
     }
 
-    /*
-     * requires: nodeIsLTArrayLength(node) == true
-     * returns: EXPR in (EXPR < ARRAY.length) or (ARRAY.length > EXPR)
-     */
-    private Node extractLTArrayLengthExpr(Node node) {
-	if (node instanceof LessThanNode) {
-	    LessThanNode lt = (LessThanNode)node;
-	    return lt.getLeftOperand();
-	} else if (node instanceof GreaterThanNode) {
-	    GreaterThanNode gt = (GreaterThanNode)node;
-	    return gt.getRightOperand();
-	} else {
-	    throw new IllegalArgumentException("internal error: precondition failed");
-	}
+    private boolean isUnbounded(Node subNode, TransferInput<CFValue, CFStore> p) {
+	CFValue value = p.getValueOfSubNode(subNode);
+	AnnotationMirror boundedAnno = value.getType().getAnnotation(Unbounded.class);
+	return (boundedAnno != null);
     }
 
-    /*
-     * requires: nodeIsLTArrayLength(node) == true
-     * returns: ARRAY in (EXPR < ARRAY.length) or (ARRAY.length > EXPR)
-     */
-    private Node extractLTArrayLengthArray(Node node) {
-	if (node instanceof LessThanNode) {
-	    LessThanNode lt = (LessThanNode)node;
-	    FieldAccessNode fieldAccess = (FieldAccessNode)lt.getRightOperand();
-	    return fieldAccess.getReceiver();
-	} else if (node instanceof GreaterThanNode) {
-	    GreaterThanNode gt = (GreaterThanNode)node;
-	    FieldAccessNode fieldAccess = (FieldAccessNode)gt.getLeftOperand();
-	    return fieldAccess.getReceiver();
-	} else {
-	    throw new IllegalArgumentException("internal error: precondition failed");
-	}
+    // returns: true iff value < Integer.MIN_VALUE or value > Integer.MAX_VALUE
+    private boolean notAnInteger(Long value) {
+	Long min = Long.valueOf(Integer.MIN_VALUE);
+	Long max = Long.valueOf(Integer.MAX_VALUE);
+	return (value < min || value > max);
     }
-    
-    public TransferResult<CFValue, CFStore>
-	visitConditionalAnd(ConditionalAndNode n, TransferInput<CFValue, CFStore> p) {
-	TransferResult<CFValue, CFStore> result = super.visitConditionalAnd(n, p);
-	// look for expressions of the form
-	// I >= 0 && I < A.length
+
+    // TODO refactor this into a helper function, I don't want to write this code four times
+    @Override
+    public TransferResult<CFValue, CFStore> visitGreaterThanOrEqual(GreaterThanOrEqualNode n, TransferInput<CFValue, CFStore> p) {
+	TransferResult<CFValue, CFStore> transferResult = super.visitGreaterThanOrEqual(n, p);
 	Node lhs = n.getLeftOperand();
 	Node rhs = n.getRightOperand();
-	if (nodeIsGEZero(lhs) && nodeIsLTArrayLength(rhs)) {
-	    Node idxExpr = extractGEZeroExpr(lhs);
-	    Node idxExpr2 = extractLTArrayLengthExpr(rhs);
-	    if (idxExpr.equals(idxExpr2)) {		
-		Node arrayExpr = extractLTArrayLengthArray(rhs);
-		// figure out what array is being referred to
-		FlowExpressions.Receiver arrayReceiver = FlowExpressions.internalReprOf(analysis.getTypeFactory(), arrayExpr);
-		String arrayRef = null;
-		if (arrayReceiver instanceof FlowExpressions.LocalVariable) {
-		    FlowExpressions.LocalVariable var = (FlowExpressions.LocalVariable)arrayReceiver;
-		    Element varEl = var.getElement();
-		    arrayRef = varEl.getSimpleName().toString();
+	if (isUnbounded(lhs, p) && isUnbounded(rhs, p)) {
+	    return createNewResult(transferResult);
+	} else {
+	    CFStore thenStore = transferResult.getRegularStore();
+	    CFStore elseStore = thenStore.copy();
+	    if (!isUnbounded(lhs, p)) {
+		// we can learn something about the RHS
+		Integer lhsLowerBound = getLowerBound(lhs, p);
+		Integer lhsUpperBound = getUpperBound(lhs, p);
+		Receiver rhsReceiver = FlowExpressions.internalReprOf(analysis.getTypeFactory(), rhs);
+		if (isUnbounded(rhs, p)) {
+		    // infer new bounds:
+		    // if the comparison is true, the lower bound for the RHS
+		    // is the lower bound of the LHS
+		    CFValue trueBound = toCFValue(createBoundedAnnotation(lhsLowerBound, Integer.MAX_VALUE), rhsReceiver);
+		    thenStore.replaceValue(rhsReceiver, trueBound);
+		    // if the comparison is false, the upper bound for the RHS
+		    // is one less than the lower bound of the LHS
+		    if (lhsLowerBound != Integer.MIN_VALUE) {
+			CFValue falseBound = toCFValue(createBoundedAnnotation(Integer.MIN_VALUE, lhsLowerBound - 1), rhsReceiver);
+			elseStore.replaceValue(rhsReceiver, falseBound);
+		    }
+		} else {
+		    // update existing bounds
+		    Integer rhsLowerBound = getLowerBound(rhs, p);
+		    Integer rhsUpperBound = getUpperBound(rhs, p);
+		    // there are three cases.
+		    // case 1: the LHS interval is strictly below the RHS interval.
+		    // case 2: the LHS interval is strictly above the RHS interval (or the upper and lower bounds are touching).
+		    // case 3: the LHS interval overlaps the RHS interval.
+		    if (lhsUpperBound < rhsLowerBound) {
+			// case 1
+			// 'then' branch is never taken
+			// TODO
+		    } else if (lhsLowerBound >= rhsUpperBound) {
+			// case 2
+			// 'else' branch is never taken
+			// TODO
+		    } else {
+			// case 3
+			// both branches can be taken
+			// in the true branch, the RHS lower bound stays the same
+			// and the RHS upper bound is equal to the LHS upper bound
+			CFValue trueBound = toCFValue(createBoundedAnnotation(rhsLowerBound, lhsUpperBound), rhsReceiver);
+			thenStore.replaceValue(rhsReceiver, trueBound);
+			// in the false branch, the RHS upper bound stays the same
+			// and the RHS lower bound is one greater than the LHS lower bound
+			CFValue falseBound = toCFValue(createBoundedAnnotation(lhsLowerBound+1, rhsUpperBound), rhsReceiver);
+			elseStore.replaceValue(rhsReceiver, falseBound);
+		    }
 		}
-		
-		if (arrayRef == null) {
-		    // couldn't figure out a good name for this array
-		    //return result;
-		    throw new IllegalStateException("internal error: could not find usable arrayRef");
-		}
-
-		CFValue value = p.getValueOfSubNode(idxExpr);
-		boolean knownSafe = false;
-		boolean knownUnsafe = false;
-
-		AnnotationMirror safetyAnno = value.getType().getAnnotation(SafeArrayAccess.class);
-		if (safetyAnno != null) {
-		    knownSafe = true;
-		}
-
-		safetyAnno = value.getType().getAnnotation(UnsafeArrayAccess.class);
-		if (safetyAnno != null) {
-		    knownUnsafe = true;
-		}
-		
-		// TODO preserve existing safety/unsafety information
-		Set<String> safeArrays = new HashSet<String>();
-		safeArrays.add(arrayRef);
-		Set<String> unsafeArrays = new HashSet<String>();
-		unsafeArrays.add(arrayRef);
-		
-		CFStore thenStore = result.getThenStore();
-		CFStore elseStore = result.getElseStore();
-		FlowExpressions.Receiver indexReceiver = FlowExpressions.internalReprOf(analysis.getTypeFactory(), idxExpr);
-		
-		// in the 'then' store, idxExpr is safe wrt. arrayExpr
-		thenStore.insertValue(indexReceiver, createSafeArrayAccessAnnotation(safeArrays));
-		// in the 'else' store, idxExpr is unsafe wrt. arrayExpr
-		elseStore.insertValue(indexReceiver, createUnsafeArrayAccessAnnotation(unsafeArrays));
-		
-		return new ConditionalTransferResult<>(result.getResultValue(), thenStore, elseStore);
 	    }
-	} else if (nodeIsLTArrayLength(lhs) && nodeIsGEZero(rhs)) {
-	    throw new UnsupportedOperationException("bogus 2");
+	    if (!isUnbounded(rhs, p)) {
+		// we can learn something about the LHS
+		Receiver lhsReceiver = FlowExpressions.internalReprOf(analysis.getTypeFactory(), lhs);
+	    }
+	    return new ConditionalTransferResult<>(transferResult.getResultValue(), thenStore, elseStore);
 	}
-	
-	return result;
+    }
+
+    // TODO dataflow refinement of [array].length expressions
+    
+    @Override
+    public TransferResult<CFValue, CFStore> visitNumericalAddition(NumericalAdditionNode n, TransferInput<CFValue, CFStore> p) {
+	TransferResult<CFValue, CFStore> transferResult = super.visitNumericalAddition(n, p);
+	Node lhs = n.getLeftOperand();
+	Node rhs = n.getRightOperand();
+	if (isUnbounded(lhs, p) || isUnbounded(rhs, p)) {
+	    return createNewResult(transferResult);
+	} else {
+	    Long Llhs = getLowerBound(lhs, p).longValue();
+	    Long Lrhs = getLowerBound(rhs, p).longValue();
+	    Long Ulhs = getUpperBound(lhs, p).longValue();
+	    Long Urhs = getUpperBound(rhs, p).longValue();
+
+	    Long newLowerBound = Llhs + Lrhs;
+	    Long newUpperBound = Ulhs + Urhs;
+	    if (notAnInteger(newLowerBound) || notAnInteger(newUpperBound)) {
+		return createNewResult(transferResult);
+	    } else {
+		return createNewResult(transferResult, newLowerBound.intValue(), newUpperBound.intValue());
+	    }
+	}
+    }
+
+    @Override
+    public TransferResult<CFValue, CFStore> visitNumericalMinus(NumericalMinusNode n, TransferInput<CFValue, CFStore> p) {
+	TransferResult<CFValue, CFStore> transferResult = super.visitNumericalMinus(n, p);
+	Node expr = n.getOperand();
+	if (isUnbounded(expr, p)) {
+	    return createNewResult(transferResult);
+	} else {
+	    Long L = getLowerBound(expr, p).longValue();
+	    Long U = getUpperBound(expr, p).longValue();
+	    Long newLowerBound = -U;
+	    Long newUpperBound = -L;
+	    if (notAnInteger(newLowerBound) || notAnInteger(newUpperBound)) {
+		return createNewResult(transferResult);
+	    } else {
+		return createNewResult(transferResult, newLowerBound.intValue(), newUpperBound.intValue());
+	    }
+	}
     }
     
+    @Override
+    public TransferResult<CFValue, CFStore> visitNumericalSubtraction(NumericalSubtractionNode n, TransferInput<CFValue, CFStore> p) {
+	TransferResult<CFValue, CFStore> transferResult = super.visitNumericalSubtraction(n, p);
+	Node lhs = n.getLeftOperand();
+	Node rhs = n.getRightOperand();
+	if (isUnbounded(lhs, p) || isUnbounded(rhs, p)) {
+	    return createNewResult(transferResult);
+	} else {
+	    Long Llhs = getLowerBound(lhs, p).longValue();
+	    Long Lrhs = getLowerBound(rhs, p).longValue();
+	    Long Ulhs = getUpperBound(lhs, p).longValue();
+	    Long Urhs = getUpperBound(rhs, p).longValue();
+
+	    Long newLowerBound = Llhs - Urhs;
+	    Long newUpperBound = Ulhs - Lrhs;
+	    if (notAnInteger(newLowerBound) || notAnInteger(newUpperBound)) {
+		return createNewResult(transferResult);
+	    } else {
+		return createNewResult(transferResult, newLowerBound.intValue(), newUpperBound.intValue());
+	    }
+	}
+    }
+
 }

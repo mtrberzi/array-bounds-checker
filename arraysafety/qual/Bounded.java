@@ -10,9 +10,10 @@ import org.checkerframework.framework.qual.SubtypeOf;
 import org.checkerframework.framework.qual.TypeQualifier;
 
 @TypeQualifier
-@SubtypeOf(UnknownArrayAccess.class)
+@SubtypeOf(Unbounded.class)
 @Retention(RetentionPolicy.RUNTIME)
 @Target({ElementType.TYPE_USE, ElementType.TYPE_PARAMETER})
-public @interface UnsafeArrayAccess {
-    String[] value();
+public @interface Bounded {
+    int lowerBound();
+    int upperBound();
 }

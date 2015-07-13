@@ -17,15 +17,4 @@ import org.checkerframework.framework.qual.TypeQualifier;
 @DefaultQualifierInHierarchy
 @SubtypeOf({})
 @Target({}) // empty target prevents programmers from writing this in a program
-public @interface UnknownArrayAccess {}
-
-
-
-
-
-
-
-
-
-
-
+public @interface Unbounded {}
