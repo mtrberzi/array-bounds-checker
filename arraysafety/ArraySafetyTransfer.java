@@ -189,7 +189,12 @@ public class ArraySafetyTransfer extends CFAbstractTransfer<CFValue, CFStore, Ar
 			// both branches can be taken
 			// in the true branch, the LHS upper bound stays the same
 			// and the LHS lower bound is equal to the RHS lower bound
-			// TODO
+			CFValue trueBound = toCFValue(createBoundedAnnotation(rhsLowerBound, lhsUpperBound), lhsReceiver);
+			thenStore.replaceValue(lhsReceiver, trueBound);
+			// in the false branch, the LHS lower bound stays the same
+			// and the LHS upper bound is equal to one less than the RHS upper bound
+			CFValue falseBound = toCFValue(createBoundedAnnotation(lhsLowerBound, rhsUpperBound - 1), lhsReceiver);
+			elseStore.replaceValue(lhsReceiver, falseBound);
 		    }
 		}
 	    }
