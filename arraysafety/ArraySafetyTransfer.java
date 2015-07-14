@@ -93,6 +93,7 @@ public class ArraySafetyTransfer extends CFAbstractTransfer<CFValue, CFStore, Ar
     }
 
     // TODO refactor this into a helper function, I don't want to write this code four times
+    // TODO when updating bounds, don't refine to a weaker bound if it's not necessary to do so
     @Override
     public TransferResult<CFValue, CFStore> visitGreaterThanOrEqual(GreaterThanOrEqualNode n, TransferInput<CFValue, CFStore> p) {
 	TransferResult<CFValue, CFStore> transferResult = super.visitGreaterThanOrEqual(n, p);
@@ -169,7 +170,27 @@ public class ArraySafetyTransfer extends CFAbstractTransfer<CFValue, CFStore, Ar
 		    }
 		} else {
 		    // update existing bounds
-		    // TODO
+		    Integer lhsLowerBound = getLowerBound(lhs, p);
+		    Integer lhsUpperBound = getUpperBound(lhs, p);
+		    // there are three cases.
+		    // case 1: the LHS interval is strictly below the RHS interval.
+		    // case 2: the LHS interval is strictly above the RHS interval (or the upper and lower bounds are touching).
+		    // case 3: the LHS interval overlaps the RHS interval.
+		    if (lhsUpperBound < rhsLowerBound) {
+			// case 1
+			// 'then' branch is never taken
+			// TODO
+		    } else if (lhsLowerBound >= rhsUpperBound) {
+			// case 2
+			// 'else' branch is never taken
+			// TODO
+		    } else {
+			// case 3
+			// both branches can be taken
+			// in the true branch, the LHS upper bound stays the same
+			// and the LHS lower bound is equal to the RHS lower bound
+			// TODO
+		    }
 		}
 	    }
 	    return new ConditionalTransferResult<>(transferResult.getResultValue(), thenStore, elseStore);
