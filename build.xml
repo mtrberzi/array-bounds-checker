@@ -1,9 +1,81 @@
-<project name="checker" default="dist" basedir=".">
-<!-- put this snipper anywhere in this tag in the main build.xml... -->
-  <target name="arraysafety-tests" depends="jar,build-tests"
-          description="Run tests for the Array Safety Checker">
-    <antcall target="-run-tests">
-      <param name="param" value="tests.ArraySafetyTest"/>
-    </antcall>
+<project name="array-bounds-checker" default="dist" basedir=".">
+
+  <description>
+    Builds the Array Safety Checker, a pluggable checker for the Checker Framework.
+  </description>
+
+  <property environment="env"/>
+  
+  <property name="jsr308.langtools" value="${env.JSR308}"/>
+  <property name="jsr308.langtools.dist" value="${jsr308.langtools}/dist"/>
+  <property name="javac.lib" value="${jsr308.langtools.dist}/lib/javac.jar"/>
+  <property name="framework.loc" value="${env.CHECKERFRAMEWORK}"/>
+  <property name="framework.lib" value="${framework.loc}/dist/framework.jar"/>
+  
+  <property name="src" location="arraysafety/"/>
+  <property name="build" location="build/"/>
+  <property name="dist" location="dist/"/>
+  <property name="tests" location="tests/"/>
+  <property name="tests.build" value="${tests}/build"/>
+
+  <tstamp>
+    <format property="timestamp" pattern="yy-MM-dd-hh-mm-ss-SS" />
+  </tstamp>
+  <!-- Prevent printing a literal ${env.BUILD_NUMBER} if it's not in env-->
+  <property name="env.EXECUTOR_NUMBER" value="" />
+  <property name="tmpdir"
+            value="${java.io.tmpdir}/${user.name}/${timestamp}${env.EXECUTOR_NUMBER}/${ant.project.name}" />
+
+  <target name="prep" description="Create required directories">
+    <mkdir dir="${build}"/>
+    <mkdir dir="${tests.build}"/>
+    <mkdir dir="${tests.build}/testclasses"/>
   </target>
+
+  <target name="clean" description="Remove generated files">
+    <delete dir="${build}"/>
+    <delete dir="${dist}"/>
+    <delete failonerror="false">
+      <fileset dir="${tests.build}" includes="**/*.class"/>
+    </delete>
+  </target>
+
+  <target name="build" depends="prep" description="Compile main files">
+    <pathconvert pathsep=" " property="qual.src.files.spaceseparated">
+      <path>
+	<fileset dir="${src}">
+	  <include name="**/qual/*.java"/>
+	</fileset>
+      </path>
+    </pathconvert>
+    <echo message="Compiling qualifiers."/>
+    <echo message="${qual.src.files.spaceseparated}" file="${tmpdir}/srcfiles-checker.txt"/>
+    <java fork="true" failonerror="true" classpath="${javac.lib}:${framework.lib}:${junit.lib}" classname="com.sun.tools.javac.Main">
+      <jvmarg line="-Xbootclasspath/p:${javac.lib}"/>
+      <arg value="-g"/>
+      <arg value="-source"/> <arg value="8"/> <arg value="-target"/> <arg value="8"/>
+      <arg value="-Xlint:-options"/>
+      <arg line="-sourcepath ${src}"/>
+      <arg line="-d ${build}"/>
+      <arg line="@${tmpdir}/srcfiles-checker.txt"/>
+      <arg line="-version"/>
+      <arg line="-XDTA:noannotationsincomments"/>
+      <arg line="-Xlint"/>
+      <arg line="-Werror"/>
+    </java>
+    <echo message="Compiling all source files."/>
+    <echo message="${src.files.spaceseparated}" file="${tmpdir}/srcfiles-checker.txt"/>
+    <!-- TODO -->
+    <delete file="${tmpdir}/srcfiles-checker.txt"/>
+  </target>
+
+  <!--
+      <target name="test" depends="jar,build-tests"
+      description="Run tests for the Array Safety Checker">
+      <antcall target="-run-tests">
+      <param name="param" value="tests.ArraySafetyTest"/>
+      </antcall>
+      </target>
+    -->
+  
 </project>
