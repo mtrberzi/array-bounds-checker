@@ -13,6 +13,9 @@
   <property name="javac.lib" value="${jsr308.langtools.dist}/lib/javac.jar"/>
   <property name="framework.loc" value="${env.CHECKERFRAMEWORK}"/>
   <property name="framework.lib" value="${framework.loc}/dist/framework.jar"/>
+  <property name="checker.loc" value="${framework.loc}/../checker"/>
+  <property name="checker.lib" value="${checker.loc}/dist/checker.jar"/>
+  <property name="junit.lib" value="${framework.loc}/tests/junit.jar"/>
   
   <property name="src" location="arraysafety/"/>
   <property name="build" location="build/"/>
@@ -112,14 +115,49 @@
       </manifest>
     </jar>
   </target>
+
+  <target name="build-tests" depends="prep" description="Compile tests">
+    <pathconvert pathsep=" " property="src.tests">
+      <path>
+	<fileset dir="${tests}">
+	  <include name="src/tests/**/*.java"/>
+	</fileset>
+      </path>
+    </pathconvert>
+    <java fork="true" failonerror="true" classpath="${build}:${javac.lib}:${junit.lib}:${framework.lib}" classname="com.sun.tools.javac.Main">
+      <jvmarg line="-Xbootclasspath/p:${javac.lib}"/>
+      <arg value="-g"/>
+      <arg value="-source"/>
+      <arg value="8"/>
+      <arg value="-target"/>
+      <arg value="8"/>
+      <!-- To not get a warning about bootstrap classpath -->
+      <arg value="-Xlint:-options"/>
+      <arg line="-sourcepath ${tests}"/>
+      <arg line="-d ${tests.build}"/>
+      <arg line="${src.tests}"/>
+    </java>
+  </target>
   
-  <!--
-      <target name="test" depends="jar,build-tests"
-      description="Run tests for the Array Safety Checker">
-      <antcall target="-run-tests">
-      <param name="param" value="tests.ArraySafetyTest"/>
-      </antcall>
-      </target>
-    -->
+  <target name="test" depends="jar,build-tests"
+	  description="Run tests for the Array Safety Checker">
+    <mkdir dir="${build.reports}"/>
+    <junit fork="true" haltonfailure="true">
+      <jvmarg line="-Xbootclasspath/p:${javac.lib}"/>
+      <!-- JDK_JAR? -->
+      <jvmarg line="-ea"/>
+      <classpath>
+	<pathelement path="${build}"/>
+	<pathelement path="${tests.build}"/>
+	<pathelement path="${javac.lib}"/>
+	<pathelement path="${junit.lib}"/>
+	<pathelement path="${framework.lib}"/>
+	<pathelement path="${checker.lib}"/>
+      </classpath>
+      <formatter type="xml"/>
+      <formatter type="brief" usefile="false"/>
+      <test name="tests.ArraySafetyTest" todir="${build.reports}"/>
+    </junit>
+  </target>
   
 </project>
