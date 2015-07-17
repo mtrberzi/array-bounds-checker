@@ -1,9 +1,11 @@
-<project name="array-bounds-checker" default="dist" basedir=".">
+<project name="array-bounds-checker" default="jar" basedir=".">
 
   <description>
     Builds the Array Safety Checker, a pluggable checker for the Checker Framework.
   </description>
 
+  <property name="build.version" value="0.0.1"/>
+  
   <property environment="env"/>
   
   <property name="jsr308.langtools" value="${env.JSR308}"/>
@@ -14,6 +16,7 @@
   
   <property name="src" location="arraysafety/"/>
   <property name="build" location="build/"/>
+  <property name="build.reports" location="${build}/reports"/>
   <property name="dist" location="dist/"/>
   <property name="tests" location="tests/"/>
   <property name="tests.build" value="${tests}/build"/>
@@ -48,6 +51,13 @@
 	</fileset>
       </path>
     </pathconvert>
+    <pathconvert pathsep=" " property="src.files.spaceseparated">
+      <path>
+	<fileset dir="${src}">
+	  <include name="**/*.java"/>
+	</fileset>
+      </path>
+    </pathconvert>
     <echo message="Compiling qualifiers."/>
     <echo message="${qual.src.files.spaceseparated}" file="${tmpdir}/srcfiles-checker.txt"/>
     <java fork="true" failonerror="true" classpath="${javac.lib}:${framework.lib}:${junit.lib}" classname="com.sun.tools.javac.Main">
@@ -65,10 +75,44 @@
     </java>
     <echo message="Compiling all source files."/>
     <echo message="${src.files.spaceseparated}" file="${tmpdir}/srcfiles-checker.txt"/>
-    <!-- TODO -->
+    <java fork="true" failonerror="true" classpath="${javac.lib}:${framework.lib}:${junit.lib}" classname="com.sun.tools.javac.Main">
+            <jvmarg line="-Xbootclasspath/p:${javac.lib}"/>
+      <arg value="-g"/>
+      <arg value="-source"/> <arg value="8"/> <arg value="-target"/> <arg value="8"/>
+      <arg value="-Xlint:-options"/>
+      <arg line="-sourcepath ${src}"/>
+      <arg line="-d ${build}"/>
+      <arg line="@${tmpdir}/srcfiles-checker.txt"/>
+      <arg line="-version"/>
+      <arg line="-Xlint"/>
+      <arg line="-Werror"/>
+    </java>
     <delete file="${tmpdir}/srcfiles-checker.txt"/>
   </target>
 
+  <!-- creates arrayboundschecker.jar -->
+  <target name="jar" depends="build,qual-jar" description="Create arrayboundschecker.jar">
+    <delete dir="${build.reports}"/>
+    <mkdir dir="dist" />
+    <jar destfile="dist/arrayboundschecker.jar" basedir="${build}" excludes="tests/">
+      <manifest>
+	<attribute name="Implementation-Version" value="${build.version}"/>
+	<attribute name="Implementation-URL" value="https://github.com/mtrberzi/array-bounds-checker"/>
+      </manifest>
+    </jar>
+  </target>
+
+  <target name="qual-jar" depends="build" description="Create arrayboundschecker-qual.jar for annotations">
+    <mkdir dir="dist"/>
+    <jar destfile="dist/arrayboundschecker-qual.jar" basedir="${build}">
+      <include name="**/qual/*"/>
+      <manifest>
+	<attribute name="Implementation-Version" value="${build.version}"/>
+	<attribute name="Implementation-URL" value="https://github.com/mtrberzi/array-bounds-checker"/>
+      </manifest>
+    </jar>
+  </target>
+  
   <!--
       <target name="test" depends="jar,build-tests"
       description="Run tests for the Array Safety Checker">
