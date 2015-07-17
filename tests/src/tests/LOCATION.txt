@@ -1,1 +1,0 @@
-checker-framework/checker/tests/src/tests/
