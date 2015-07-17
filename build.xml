@@ -8,10 +8,10 @@
   
   <property environment="env"/>
   
-  <property name="jsr308.langtools" value="${env.JSR308}"/>
+  <property name="jsr308.langtools" value="${env.JSR308}"/> <!-- jsr308/jsr308-langtools -->
   <property name="jsr308.langtools.dist" value="${jsr308.langtools}/dist"/>
   <property name="javac.lib" value="${jsr308.langtools.dist}/lib/javac.jar"/>
-  <property name="framework.loc" value="${env.CHECKERFRAMEWORK}"/>
+  <property name="framework.loc" value="${env.CHECKERFRAMEWORK}"/> <!-- jsr308/checker-framework/framework -->
   <property name="framework.lib" value="${framework.loc}/dist/framework.jar"/>
   <property name="checker.loc" value="${framework.loc}/../checker"/>
   <property name="checker.lib" value="${checker.loc}/dist/checker.jar"/>

@@ -8,7 +8,7 @@ public class Combined {
 	    return 0;
 	}
     }
-
+    /*
     public int max_safe(int[] arr) {
 	int max = Integer.MIN_VALUE;
 	int i;
@@ -19,5 +19,6 @@ public class Combined {
 	}
 	return max;
     }
+    */
     
 }
