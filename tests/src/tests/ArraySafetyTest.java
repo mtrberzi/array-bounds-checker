@@ -17,6 +17,6 @@ public class ArraySafetyTest extends ParameterizedCheckerTest {
     
     @Parameters
     public static Collection<Object[]> data() {
-	return testFiles("arraysafety", "all-systems");
+	return testFiles("arraysafety"); // TODO can we do the all-systems test from outside the checker framework directory? we at least need access to the source
     }
 }

@@ -1,9 +1,163 @@
-<project name="checker" default="dist" basedir=".">
-<!-- put this snipper anywhere in this tag in the main build.xml... -->
-  <target name="arraysafety-tests" depends="jar,build-tests"
-          description="Run tests for the Array Safety Checker">
-    <antcall target="-run-tests">
-      <param name="param" value="tests.ArraySafetyTest"/>
-    </antcall>
+<project name="array-bounds-checker" default="jar" basedir=".">
+
+  <description>
+    Builds the Array Safety Checker, a pluggable checker for the Checker Framework.
+  </description>
+
+  <property name="build.version" value="0.0.1"/>
+  
+  <property environment="env"/>
+  
+  <property name="jsr308.langtools" value="${env.JSR308}"/> <!-- jsr308/jsr308-langtools -->
+  <property name="jsr308.langtools.dist" value="${jsr308.langtools}/dist"/>
+  <property name="javac.lib" value="${jsr308.langtools.dist}/lib/javac.jar"/>
+  <property name="framework.loc" value="${env.CHECKERFRAMEWORK}"/> <!-- jsr308/checker-framework/framework -->
+  <property name="framework.lib" value="${framework.loc}/dist/framework.jar"/>
+  <property name="checker.loc" value="${framework.loc}/../checker"/>
+  <property name="checker.lib" value="${checker.loc}/dist/checker.jar"/>
+  <property name="junit.lib" value="${framework.loc}/tests/junit.jar"/>
+  
+  <property name="src" location="arraysafety/"/>
+  <property name="build" location="build/"/>
+  <property name="build.reports" location="${build}/reports"/>
+  <property name="dist" location="dist/"/>
+  <property name="tests" location="tests/"/>
+  <property name="tests.build" value="${tests}/build"/>
+
+  <tstamp>
+    <format property="timestamp" pattern="yy-MM-dd-hh-mm-ss-SS" />
+  </tstamp>
+  <!-- Prevent printing a literal ${env.BUILD_NUMBER} if it's not in env-->
+  <property name="env.EXECUTOR_NUMBER" value="" />
+  <property name="tmpdir"
+            value="${java.io.tmpdir}/${user.name}/${timestamp}${env.EXECUTOR_NUMBER}/${ant.project.name}" />
+
+  <target name="prep" description="Create required directories">
+    <mkdir dir="${build}"/>
+    <mkdir dir="${tests.build}"/>
+    <mkdir dir="${tests.build}/testclasses"/>
   </target>
+
+  <target name="clean" description="Remove generated files">
+    <delete dir="${build}"/>
+    <delete dir="${dist}"/>
+    <delete failonerror="false">
+      <fileset dir="${tests.build}" includes="**/*.class"/>
+    </delete>
+  </target>
+
+  <target name="build" depends="prep" description="Compile main files">
+    <pathconvert pathsep=" " property="qual.src.files.spaceseparated">
+      <path>
+	<fileset dir="${src}">
+	  <include name="**/qual/*.java"/>
+	</fileset>
+      </path>
+    </pathconvert>
+    <pathconvert pathsep=" " property="src.files.spaceseparated">
+      <path>
+	<fileset dir="${src}">
+	  <include name="**/*.java"/>
+	</fileset>
+      </path>
+    </pathconvert>
+    <echo message="Compiling qualifiers."/>
+    <echo message="${qual.src.files.spaceseparated}" file="${tmpdir}/srcfiles-checker.txt"/>
+    <java fork="true" failonerror="true" classpath="${javac.lib}:${framework.lib}:${junit.lib}" classname="com.sun.tools.javac.Main">
+      <jvmarg line="-Xbootclasspath/p:${javac.lib}"/>
+      <arg value="-g"/>
+      <arg value="-source"/> <arg value="8"/> <arg value="-target"/> <arg value="8"/>
+      <arg value="-Xlint:-options"/>
+      <arg line="-sourcepath ${src}"/>
+      <arg line="-d ${build}"/>
+      <arg line="@${tmpdir}/srcfiles-checker.txt"/>
+      <arg line="-version"/>
+      <arg line="-XDTA:noannotationsincomments"/>
+      <arg line="-Xlint"/>
+      <arg line="-Werror"/>
+    </java>
+    <echo message="Compiling all source files."/>
+    <echo message="${src.files.spaceseparated}" file="${tmpdir}/srcfiles-checker.txt"/>
+    <java fork="true" failonerror="true" classpath="${javac.lib}:${framework.lib}:${junit.lib}" classname="com.sun.tools.javac.Main">
+            <jvmarg line="-Xbootclasspath/p:${javac.lib}"/>
+      <arg value="-g"/>
+      <arg value="-source"/> <arg value="8"/> <arg value="-target"/> <arg value="8"/>
+      <arg value="-Xlint:-options"/>
+      <arg line="-sourcepath ${src}"/>
+      <arg line="-d ${build}"/>
+      <arg line="@${tmpdir}/srcfiles-checker.txt"/>
+      <arg line="-version"/>
+      <arg line="-Xlint"/>
+      <arg line="-Werror"/>
+    </java>
+    <delete file="${tmpdir}/srcfiles-checker.txt"/>
+  </target>
+
+  <!-- creates arrayboundschecker.jar -->
+  <target name="jar" depends="build,qual-jar" description="Create arrayboundschecker.jar">
+    <delete dir="${build.reports}"/>
+    <mkdir dir="dist" />
+    <jar destfile="dist/arrayboundschecker.jar" basedir="${build}" excludes="tests/">
+      <manifest>
+	<attribute name="Implementation-Version" value="${build.version}"/>
+	<attribute name="Implementation-URL" value="https://github.com/mtrberzi/array-bounds-checker"/>
+      </manifest>
+    </jar>
+  </target>
+
+  <target name="qual-jar" depends="build" description="Create arrayboundschecker-qual.jar for annotations">
+    <mkdir dir="dist"/>
+    <jar destfile="dist/arrayboundschecker-qual.jar" basedir="${build}">
+      <include name="**/qual/*"/>
+      <manifest>
+	<attribute name="Implementation-Version" value="${build.version}"/>
+	<attribute name="Implementation-URL" value="https://github.com/mtrberzi/array-bounds-checker"/>
+      </manifest>
+    </jar>
+  </target>
+
+  <target name="build-tests" depends="prep" description="Compile tests">
+    <pathconvert pathsep=" " property="src.tests">
+      <path>
+	<fileset dir="${tests}">
+	  <include name="src/tests/**/*.java"/>
+	</fileset>
+      </path>
+    </pathconvert>
+    <java fork="true" failonerror="true" classpath="${build}:${javac.lib}:${junit.lib}:${framework.lib}" classname="com.sun.tools.javac.Main">
+      <jvmarg line="-Xbootclasspath/p:${javac.lib}"/>
+      <arg value="-g"/>
+      <arg value="-source"/>
+      <arg value="8"/>
+      <arg value="-target"/>
+      <arg value="8"/>
+      <!-- To not get a warning about bootstrap classpath -->
+      <arg value="-Xlint:-options"/>
+      <arg line="-sourcepath ${tests}"/>
+      <arg line="-d ${tests.build}"/>
+      <arg line="${src.tests}"/>
+    </java>
+  </target>
+  
+  <target name="test" depends="jar,build-tests"
+	  description="Run tests for the Array Safety Checker">
+    <mkdir dir="${build.reports}"/>
+    <junit fork="true" haltonfailure="true">
+      <jvmarg line="-Xbootclasspath/p:${javac.lib}"/>
+      <!-- JDK_JAR? -->
+      <jvmarg line="-ea"/>
+      <classpath>
+	<pathelement path="${build}"/>
+	<pathelement path="${tests.build}"/>
+	<pathelement path="${javac.lib}"/>
+	<pathelement path="${junit.lib}"/>
+	<pathelement path="${framework.lib}"/>
+	<pathelement path="${checker.lib}"/>
+      </classpath>
+      <formatter type="xml"/>
+      <formatter type="brief" usefile="false"/>
+      <test name="tests.ArraySafetyTest" todir="${build.reports}"/>
+    </junit>
+  </target>
+  
 </project>
