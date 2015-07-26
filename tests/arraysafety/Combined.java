@@ -20,7 +20,7 @@ public class Combined {
 	return max;
     }
     */
-
+    
     public int manipulate_length(int[] arr, boolean b) {
 	int x = 1;
 	if (b) {
@@ -29,7 +29,7 @@ public class Combined {
 	if (x >= 0 && x < arr.length) {
 	    int tmp = arr[x]; // safe
 	    x = x + 1; // x should lose LT(arr)
-	    //:: error: (array.access.unsafe)
+	    //:: warning: (array.access.unknown)
 	    return arr[x];
 	} else {
 	    return 0;
