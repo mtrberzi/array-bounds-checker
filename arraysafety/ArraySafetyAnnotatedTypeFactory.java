@@ -83,10 +83,12 @@ public class ArraySafetyAnnotatedTypeFactory extends GenericAnnotatedTypeFactory
 	return defaults;
     }
 
-    AnnotationMirror createBoundedAnnotation(Integer lowerBound, Integer upperBound) {
+    AnnotationMirror createBoundedAnnotation(Integer lowerBound, Integer upperBound, Set<String> ltArrays) {
 	AnnotationBuilder builder = new AnnotationBuilder(processingEnv, Bounded.class);
 	builder.setValue("lowerBound", lowerBound);
 	builder.setValue("upperBound", upperBound);
+	List<String> values = new ArrayList<String>(ltArrays);
+	builder.setValue("lessThanArrays", values);
 	return builder.build();
     }
     
@@ -100,7 +102,7 @@ public class ArraySafetyAnnotatedTypeFactory extends GenericAnnotatedTypeFactory
 	    Tree.Kind kind = tree.getKind();
 	    if (kind.equals(Tree.Kind.INT_LITERAL)) {
 		Integer literal = (Integer)tree.getValue();
-		type.replaceAnnotation(createBoundedAnnotation(literal, literal));
+		type.replaceAnnotation(createBoundedAnnotation(literal, literal, new HashSet<String>()));
 	    }
 	    //return super.visitLiteral(tree, type);
 	    return null;
@@ -123,7 +125,7 @@ public class ArraySafetyAnnotatedTypeFactory extends GenericAnnotatedTypeFactory
 	    } else if (dimensionBoundsType.hasAnnotation(Bounded.class)) {
 		Integer lowerBound = getLowerBound(dimensionBoundsType);
 		Integer upperBound = getUpperBound(dimensionBoundsType);
-		type.replaceAnnotation(createBoundedAnnotation(lowerBound, upperBound));
+		type.replaceAnnotation(createBoundedAnnotation(lowerBound, upperBound, new HashSet<String>()));
 	    } else if (dimensionBoundsType.hasAnnotation(Unbounded.class)) {
 		type.replaceAnnotation(UNBOUNDED);
 	    }
@@ -146,7 +148,7 @@ public class ArraySafetyAnnotatedTypeFactory extends GenericAnnotatedTypeFactory
 		    upperBound = x;
 		}
 	    }
-	    return createBoundedAnnotation(lowerBound, upperBound);
+	    return createBoundedAnnotation(lowerBound, upperBound, new HashSet<String>());
 	}
 	
 	public Integer getLowerBound(AnnotatedTypeMirror type) {
@@ -258,8 +260,12 @@ public class ArraySafetyAnnotatedTypeFactory extends GenericAnnotatedTypeFactory
 
 		Integer newLowerBound = Integer.min(L1, L2);
 		Integer newUpperBound = Integer.max(U1, U2);
+
+		List<String> lhsArrays = AnnotationUtils.getElementValueArray(a1, "lessThanArrays", String.class, true);
+		List<String> rhsArrays = AnnotationUtils.getElementValueArray(a2, "lessThanArrays", String.class, true);
+		lhsArrays.retainAll(rhsArrays);
 		
-		return createBoundedAnnotation(newLowerBound, newUpperBound);
+		return createBoundedAnnotation(newLowerBound, newUpperBound, new HashSet<String>(lhsArrays));
 	    }
 	    // annotations are in this hierarchy but not the same
 	    else {
@@ -297,7 +303,10 @@ public class ArraySafetyAnnotatedTypeFactory extends GenericAnnotatedTypeFactory
 		Integer Ulhs = AnnotationUtils.getElementValue(lhs, "upperBound", Integer.class, true);
 		Integer Urhs = AnnotationUtils.getElementValue(rhs, "upperBound", Integer.class, true);
 
-		return (Llhs <= Lrhs) && (Urhs <= Ulhs);
+		List<String> lhsArrays = AnnotationUtils.getElementValueArray(lhs, "lessThanArrays", String.class, true);
+		List<String> rhsArrays = AnnotationUtils.getElementValueArray(rhs, "lessThanArrays", String.class, true);
+		
+		return (Llhs <= Lrhs) && (Urhs <= Ulhs) && rhsArrays.containsAll(lhsArrays);
 		
 	    } else {
 		return false;

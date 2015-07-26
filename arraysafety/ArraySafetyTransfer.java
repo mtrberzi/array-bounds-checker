@@ -20,6 +20,8 @@ import org.checkerframework.dataflow.analysis.FlowExpressions;
 import org.checkerframework.dataflow.analysis.FlowExpressions.Receiver;
 import org.checkerframework.checker.arraysafety.qual.*;
 import org.checkerframework.javacutil.AnnotationUtils;
+import java.util.List;
+import java.util.ArrayList;
 
 public class ArraySafetyTransfer extends CFAbstractTransfer<CFValue, CFStore, ArraySafetyTransfer> {
 
@@ -33,8 +35,8 @@ public class ArraySafetyTransfer extends CFAbstractTransfer<CFValue, CFStore, Ar
 	atypefactory = analysis.getTypeFactory();
     }
 
-    private AnnotationMirror createBoundedAnnotation(Integer lowerBound, Integer upperBound) {
-	return ((ArraySafetyAnnotatedTypeFactory)atypefactory).createBoundedAnnotation(lowerBound, upperBound);
+    private AnnotationMirror createBoundedAnnotation(Integer lowerBound, Integer upperBound, Set<String> ltArrays) {
+	return ((ArraySafetyAnnotatedTypeFactory)atypefactory).createBoundedAnnotation(lowerBound, upperBound, ltArrays);
     }
 
     private AnnotationMirror createUnboundedAnnotation() {
@@ -49,8 +51,9 @@ public class ArraySafetyTransfer extends CFAbstractTransfer<CFValue, CFStore, Ar
     }
 
     // returns: bounded result value
-    private TransferResult<CFValue, CFStore> createNewResult(TransferResult<CFValue, CFStore> result, Integer lowerBound, Integer upperBound) {
-	AnnotationMirror bounds = createBoundedAnnotation(lowerBound, upperBound);
+    private TransferResult<CFValue, CFStore> createNewResult(TransferResult<CFValue, CFStore> result, Integer lowerBound, Integer upperBound,
+							     Set<String> ltArrays) {
+	AnnotationMirror bounds = createBoundedAnnotation(lowerBound, upperBound, ltArrays);
 	CFValue newResultValue = analysis.createSingleAnnotationValue(bounds, result.getResultValue().getType().getUnderlyingType());
 	return new RegularTransferResult<>(newResultValue, result.getRegularStore());
     }
@@ -85,6 +88,97 @@ public class ArraySafetyTransfer extends CFAbstractTransfer<CFValue, CFStore, Ar
 	return (boundedAnno != null);
     }
 
+    // precondition: hasLTArrayLengthAnnotation(subNode, p) == true
+    // returns: arrays named in that annotation on subNode
+    private List<String> getLTArrays(Node subNode, TransferInput<CFValue, CFStore> p) {
+	CFValue value = p.getValueOfSubNode(subNode);
+	AnnotationMirror ltAnno = value.getType().getAnnotation(Bounded.class);
+	if (ltAnno == null) {
+	    return new ArrayList<String>();
+	} else {
+	    return AnnotationUtils.getElementValueArray(ltAnno, "lessThanArrays", String.class, true);
+	}
+    }
+    
+    /*
+     * returns: true iff the given node is an expression of the form
+     * (EXPR.length) and EXPR has array type
+     */
+    private boolean nodeIsArrayLengthAccess(Node node) {
+	if (!(node instanceof FieldAccessNode)) {
+	    return false;
+	}
+	FieldAccessNode fieldAccess = (FieldAccessNode)node;
+	String field = fieldAccess.getFieldName();
+	if (!(field.equals("length"))) {
+	    return false;
+	}
+
+	// type-check expression
+	TypeMirror exprType = fieldAccess.getReceiver().getType();
+	if (!(exprType instanceof ArrayType)) {
+	    return false;
+	}
+
+	return true;
+    }
+    
+    /*
+     * returns: true iff the given node is an expression of the form
+     * ( EXPR < [ARRAY].length ) or ( [ARRAY].length > EXPR )
+     */
+    private boolean nodeIsLessThanArrayLength(Node node) {
+	if (node instanceof LessThanNode) {
+	    LessThanNode lt = (LessThanNode)node;
+	    if (nodeIsArrayLengthAccess(lt.getRightOperand())) {
+		return true;
+	    } else {
+		return false;
+	    }
+	} else if (node instanceof GreaterThanNode) {
+	    GreaterThanNode gt = (GreaterThanNode)node;
+	    if (nodeIsArrayLengthAccess(gt.getLeftOperand())) {
+		return true;
+	    } else {
+		return false;
+	    }
+	} else {
+	    return false;
+	}
+    }
+
+    @Override
+    public TransferResult<CFValue, CFStore> visitLessThan(LessThanNode n, TransferInput<CFValue, CFStore> p) {
+	TransferResult<CFValue, CFStore> transferResult = super.visitLessThan(n, p);
+	// TODO perform bounds analysis
+	if (!(nodeIsLessThanArrayLength(n))) {
+	    return transferResult;
+	}
+	// LHS gains LessThanArrayLength(rhs!array)
+	Node lhs = n.getLeftOperand();
+	Receiver lhsReceiver = FlowExpressions.internalReprOf(analysis.getTypeFactory(), lhs);
+	Node array = ((FieldAccessNode)n.getRightOperand()).getReceiver();
+	Receiver arrayReceiver = FlowExpressions.internalReprOf(analysis.getTypeFactory(), array);
+	String arrayName = arrayReceiver.toString(); // good enough for the Map Key Checker...
+	
+	Set<String> annoValues = new HashSet<String>();
+	annoValues.add(arrayName);
+	Integer lhsLowerBound = Integer.MIN_VALUE;
+	Integer lhsUpperBound = Integer.MAX_VALUE;
+	
+	if (!isUnbounded(lhs, p)) {
+	    annoValues.addAll(getLTArrays(lhs, p));
+	    lhsLowerBound = getLowerBound(lhs, p);
+	    lhsUpperBound = getUpperBound(lhs, p);   
+	}
+	CFValue ltAnno = toCFValue(createBoundedAnnotation(lhsLowerBound, lhsUpperBound, annoValues), lhsReceiver);
+	CFStore thenStore = transferResult.getRegularStore();
+	CFStore elseStore = thenStore.copy();
+	thenStore.replaceValue(lhsReceiver, ltAnno);
+	
+	return new ConditionalTransferResult<>(transferResult.getResultValue(), thenStore, elseStore);
+    }
+    
     // returns: true iff value < Integer.MIN_VALUE or value > Integer.MAX_VALUE
     private boolean notAnInteger(Long value) {
 	Long min = Long.valueOf(Integer.MIN_VALUE);
@@ -113,12 +207,14 @@ public class ArraySafetyTransfer extends CFAbstractTransfer<CFValue, CFStore, Ar
 		    // infer new bounds:
 		    // if the comparison is true, the lower bound for the RHS
 		    // is the lower bound of the LHS
-		    CFValue trueBound = toCFValue(createBoundedAnnotation(lhsLowerBound, Integer.MAX_VALUE), rhsReceiver);
+		    CFValue trueBound = toCFValue(createBoundedAnnotation(lhsLowerBound, Integer.MAX_VALUE,
+									  new HashSet<String>(getLTArrays(rhs,p))), rhsReceiver);
 		    thenStore.replaceValue(rhsReceiver, trueBound);
 		    // if the comparison is false, the lower bound for the RHS
 		    // is one greater than the lower bound of the LHS
 		    if (lhsLowerBound != Integer.MAX_VALUE) {
-			CFValue falseBound = toCFValue(createBoundedAnnotation(Integer.MIN_VALUE, lhsLowerBound + 1), rhsReceiver);
+			CFValue falseBound = toCFValue(createBoundedAnnotation(Integer.MIN_VALUE, lhsLowerBound + 1,
+									       new HashSet<String>(getLTArrays(rhs,p))), rhsReceiver);
 			elseStore.replaceValue(rhsReceiver, falseBound);
 		    }
 		} else {
@@ -142,11 +238,13 @@ public class ArraySafetyTransfer extends CFAbstractTransfer<CFValue, CFStore, Ar
 			// both branches can be taken
 			// in the true branch, the RHS lower bound stays the same
 			// and the RHS upper bound is equal to the LHS upper bound
-			CFValue trueBound = toCFValue(createBoundedAnnotation(rhsLowerBound, lhsUpperBound), rhsReceiver);
+			CFValue trueBound = toCFValue(createBoundedAnnotation(rhsLowerBound, lhsUpperBound,
+									      new HashSet<String>(getLTArrays(rhs,p))), rhsReceiver);
 			thenStore.replaceValue(rhsReceiver, trueBound);
 			// in the false branch, the RHS upper bound stays the same
 			// and the RHS lower bound is one greater than the LHS lower bound
-			CFValue falseBound = toCFValue(createBoundedAnnotation(lhsLowerBound+1, rhsUpperBound), rhsReceiver);
+			CFValue falseBound = toCFValue(createBoundedAnnotation(lhsLowerBound+1, rhsUpperBound,
+									       new HashSet<String>(getLTArrays(rhs,p))), rhsReceiver);
 			elseStore.replaceValue(rhsReceiver, falseBound);
 		    }
 		}
@@ -160,12 +258,14 @@ public class ArraySafetyTransfer extends CFAbstractTransfer<CFValue, CFStore, Ar
 		    // infer new bounds:
 		    // if the comparison is true, the lower bound for the LHS
 		    /// is the lower bound for the RHS
-		    CFValue trueBound = toCFValue(createBoundedAnnotation(rhsLowerBound, Integer.MAX_VALUE), lhsReceiver);
+		    CFValue trueBound = toCFValue(createBoundedAnnotation(rhsLowerBound, Integer.MAX_VALUE,
+									  new HashSet<String>(getLTArrays(lhs,p))), lhsReceiver);
 		    thenStore.replaceValue(lhsReceiver, trueBound);
 		    // if the comparison is false, the upper bound for the LHS
 		    // is one less than the lower bound of the RHS
 		    if (rhsLowerBound != Integer.MIN_VALUE) {
-			CFValue falseBound = toCFValue(createBoundedAnnotation(Integer.MIN_VALUE, rhsLowerBound - 1), lhsReceiver);
+			CFValue falseBound = toCFValue(createBoundedAnnotation(Integer.MIN_VALUE, rhsLowerBound - 1,
+									       new HashSet<String>(getLTArrays(lhs,p))), lhsReceiver);
 			elseStore.replaceValue(lhsReceiver, falseBound);
 		    }
 		} else {
@@ -189,11 +289,13 @@ public class ArraySafetyTransfer extends CFAbstractTransfer<CFValue, CFStore, Ar
 			// both branches can be taken
 			// in the true branch, the LHS upper bound stays the same
 			// and the LHS lower bound is equal to the RHS lower bound
-			CFValue trueBound = toCFValue(createBoundedAnnotation(rhsLowerBound, lhsUpperBound), lhsReceiver);
+			CFValue trueBound = toCFValue(createBoundedAnnotation(rhsLowerBound, lhsUpperBound,
+									      new HashSet<String>(getLTArrays(lhs,p))), lhsReceiver);
 			thenStore.replaceValue(lhsReceiver, trueBound);
 			// in the false branch, the LHS lower bound stays the same
 			// and the LHS upper bound is equal to one less than the RHS upper bound
-			CFValue falseBound = toCFValue(createBoundedAnnotation(lhsLowerBound, rhsUpperBound - 1), lhsReceiver);
+			CFValue falseBound = toCFValue(createBoundedAnnotation(lhsLowerBound, rhsUpperBound - 1,
+									       new HashSet<String>(getLTArrays(lhs,p))), lhsReceiver);
 			elseStore.replaceValue(lhsReceiver, falseBound);
 		    }
 		}
@@ -220,7 +322,7 @@ public class ArraySafetyTransfer extends CFAbstractTransfer<CFValue, CFStore, Ar
 	    if (notAnInteger(newLowerBound) || notAnInteger(newUpperBound)) {
 		return createNewResult(transferResult);
 	    } else {
-		return createNewResult(transferResult, newLowerBound.intValue(), newUpperBound.intValue());
+		return createNewResult(transferResult, newLowerBound.intValue(), newUpperBound.intValue(), new HashSet<String>());
 	    }
 	}
     }
@@ -239,7 +341,7 @@ public class ArraySafetyTransfer extends CFAbstractTransfer<CFValue, CFStore, Ar
 	    if (notAnInteger(newLowerBound) || notAnInteger(newUpperBound)) {
 		return createNewResult(transferResult);
 	    } else {
-		return createNewResult(transferResult, newLowerBound.intValue(), newUpperBound.intValue());
+		return createNewResult(transferResult, newLowerBound.intValue(), newUpperBound.intValue(), new HashSet<String>());
 	    }
 	}
     }
@@ -262,7 +364,7 @@ public class ArraySafetyTransfer extends CFAbstractTransfer<CFValue, CFStore, Ar
 	    if (notAnInteger(newLowerBound) || notAnInteger(newUpperBound)) {
 		return createNewResult(transferResult);
 	    } else {
-		return createNewResult(transferResult, newLowerBound.intValue(), newUpperBound.intValue());
+		return createNewResult(transferResult, newLowerBound.intValue(), newUpperBound.intValue(), new HashSet<String>());
 	    }
 	}
     }
