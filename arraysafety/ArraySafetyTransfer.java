@@ -322,7 +322,7 @@ public class ArraySafetyTransfer extends CFAbstractTransfer<CFValue, CFStore, Ar
 	    if (notAnInteger(newLowerBound) || notAnInteger(newUpperBound)) {
 		return createNewResult(transferResult);
 	    } else {
-		return createNewResult(transferResult, newLowerBound.intValue(), newUpperBound.intValue());
+		return createNewResult(transferResult, newLowerBound.intValue(), newUpperBound.intValue(), new HashSet<String>());
 	    }
 	}
     }
@@ -341,7 +341,7 @@ public class ArraySafetyTransfer extends CFAbstractTransfer<CFValue, CFStore, Ar
 	    if (notAnInteger(newLowerBound) || notAnInteger(newUpperBound)) {
 		return createNewResult(transferResult);
 	    } else {
-		return createNewResult(transferResult, newLowerBound.intValue(), newUpperBound.intValue());
+		return createNewResult(transferResult, newLowerBound.intValue(), newUpperBound.intValue(), new HashSet<String>());
 	    }
 	}
     }
@@ -364,7 +364,7 @@ public class ArraySafetyTransfer extends CFAbstractTransfer<CFValue, CFStore, Ar
 	    if (notAnInteger(newLowerBound) || notAnInteger(newUpperBound)) {
 		return createNewResult(transferResult);
 	    } else {
-		return createNewResult(transferResult, newLowerBound.intValue(), newUpperBound.intValue());
+		return createNewResult(transferResult, newLowerBound.intValue(), newUpperBound.intValue(), new HashSet<String>());
 	    }
 	}
     }
