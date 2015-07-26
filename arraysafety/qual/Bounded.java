@@ -16,4 +16,5 @@ import org.checkerframework.framework.qual.TypeQualifier;
 public @interface Bounded {
     int lowerBound();
     int upperBound();
+    String[] lessThanArrays();
 }

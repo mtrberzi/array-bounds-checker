@@ -21,15 +21,11 @@ import javax.lang.model.element.AnnotationMirror;
 public class ArraySafetyVisitor extends BaseTypeVisitor<ArraySafetyAnnotatedTypeFactory> {
 
     protected final AnnotationMirror UNBOUNDED;
-    protected GenericAnnotatedTypeFactory<?, ?, ?, ?> lengthATF;
     
     public ArraySafetyVisitor(BaseTypeChecker checker) {
 	super(checker);
 
 	UNBOUNDED = AnnotationUtils.fromClass(elements, Unbounded.class);
-	
-	lengthATF = checker.getTypeFactoryOfSubchecker(ArrayLengthSubchecker.class);
-	assert lengthATF != null : "cannot access ArrayLengthSubchecker annotations";
     }
 
     public Integer getLowerBound(AnnotatedTypeMirror type) {
@@ -43,12 +39,8 @@ public class ArraySafetyVisitor extends BaseTypeVisitor<ArraySafetyAnnotatedType
     }
 
     protected List<String> getLTArrays(AnnotatedTypeMirror type) {
-	AnnotationMirror ltAnno = type.getAnnotation(LessThanArrayLength.class);
-	if (ltAnno == null) {
-	    return new ArrayList<String>();
-	} else {
-	    return AnnotationUtils.getElementValueArray(ltAnno, "values", String.class, true);
-	}
+	AnnotationMirror boundedAnno = type.getAnnotationInHierarchy(UNBOUNDED);
+	return AnnotationUtils.getElementValueArray(boundedAnno, "lessThanArrays", String.class, true);
     }
     
     @Override
@@ -59,10 +51,8 @@ public class ArraySafetyVisitor extends BaseTypeVisitor<ArraySafetyAnnotatedType
 	AnnotatedTypeMirror arrayType = atypeFactory.getAnnotatedType(array);
 	AnnotatedTypeMirror indexType = atypeFactory.getAnnotatedType(index);
 
-	AnnotatedTypeMirror indexLengthType = lengthATF.getAnnotatedType(index);
-
 	System.out.println("*** " + arrayType.getAnnotations().toString());
-	System.out.println("*** " + indexType.getAnnotations().toString() + " " + indexLengthType.getAnnotations().toString());
+	System.out.println("*** " + indexType.getAnnotations().toString());
 
 	if (arrayType.hasAnnotation(Bounded.class) && indexType.hasAnnotation(Unbounded.class)) {
 	    checker.report(Result.failure("array.access.unsafe"), node);
@@ -79,18 +69,12 @@ public class ArraySafetyVisitor extends BaseTypeVisitor<ArraySafetyAnnotatedType
 		System.out.println("--- index can be negative");
 	    } else if (indexUpper >= arrayLower) {
 		// check length type
-		if (indexLengthType.hasAnnotation(LessThanArrayLength.class)) {
-		    List<String> safeArrays = getLTArrays(indexLengthType);
-		    String arrayName = array.toString();
-		    System.out.println("*** checking " + arrayName + " against " + safeArrays.toString());
-		    if (safeArrays.contains(arrayName)) {
-			System.out.println("+++ ok");
-		    } else {
-			checker.report(Result.failure("array.access.unsafe"), node);
-			System.out.println("--- index not bounded above by array length");
-		    }
+		List<String> safeArrays = getLTArrays(indexType);
+		String arrayName = array.toString();
+		System.out.println("*** checking " + arrayName + " against " + safeArrays.toString());
+		if (safeArrays.contains(arrayName)) {
+		    System.out.println("+++ ok");
 		} else {
-		    // unsafe because the index might be larger than the shortest possible array
 		    checker.report(Result.failure("array.access.unsafe"), node);
 		    System.out.println("--- index can be out of bounds");
 		}
@@ -105,18 +89,13 @@ public class ArraySafetyVisitor extends BaseTypeVisitor<ArraySafetyAnnotatedType
 		checker.report(Result.failure("array.access.unsafe"), node);
 		System.out.println("--- index can be negative");
 	    } else {
-		if (indexLengthType.hasAnnotation(LessThanArrayLength.class)) {
-		    List<String> safeArrays = getLTArrays(indexLengthType);
-		    String arrayName = array.toString();
-		    System.out.println("*** checking " + arrayName + " against " + safeArrays.toString());
-		    if (safeArrays.contains(arrayName)) {
-			System.out.println("+++ ok");
-		    } else {
-			checker.report(Result.failure("array.access.unsafe"), node);
-			System.out.println("--- index not bounded above by array length");
-		    }
+		List<String> safeArrays = getLTArrays(indexType);
+		String arrayName = array.toString();
+		System.out.println("*** checking " + arrayName + " against " + safeArrays.toString());
+		if (safeArrays.contains(arrayName)) {
+		    System.out.println("+++ ok");
 		} else {
-		    checker.report(Result.warning("array.access.unknown"), node);
+		    checker.report(Result.failure("array.access.unsafe"), node);
 		    System.out.println("--- unbounded array");
 		}
 	    }

@@ -17,7 +17,6 @@ public class ArraySafetyChecker extends BaseTypeChecker {
 	LinkedHashSet<Class<? extends BaseTypeChecker>> subcheckers = new LinkedHashSet<>();
 	subcheckers.addAll(super.getImmediateSubcheckerClasses());
 	subcheckers.add(ValueChecker.class);
-	subcheckers.add(ArrayLengthSubchecker.class);
 	return subcheckers;
     }
 }
