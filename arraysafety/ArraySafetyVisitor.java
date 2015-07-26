@@ -95,7 +95,7 @@ public class ArraySafetyVisitor extends BaseTypeVisitor<ArraySafetyAnnotatedType
 		if (safeArrays.contains(arrayName)) {
 		    System.out.println("+++ ok");
 		} else {
-		    checker.report(Result.failure("array.access.unsafe"), node);
+		    checker.report(Result.warning("array.access.unknown"), node);
 		    System.out.println("--- unbounded array");
 		}
 	    }
