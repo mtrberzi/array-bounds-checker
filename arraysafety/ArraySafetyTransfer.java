@@ -33,8 +33,8 @@ public class ArraySafetyTransfer extends CFAbstractTransfer<CFValue, CFStore, Ar
 	atypefactory = analysis.getTypeFactory();
     }
 
-    private AnnotationMirror createBoundedAnnotation(Integer lowerBound, Integer upperBound) {
-	return ((ArraySafetyAnnotatedTypeFactory)atypefactory).createBoundedAnnotation(lowerBound, upperBound);
+    private AnnotationMirror createBoundedAnnotation(Integer lowerBound, Integer upperBound, Set<String> ltArrays) {
+	return ((ArraySafetyAnnotatedTypeFactory)atypefactory).createBoundedAnnotation(lowerBound, upperBound, ltArrays);
     }
 
     private AnnotationMirror createUnboundedAnnotation() {
